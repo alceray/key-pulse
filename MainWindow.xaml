@@ -4,9 +4,14 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:KeyPulse"
+        xmlns:views="clr-namespace:KeyPulse.Views"
         mc:Ignorable="d"
-        Title="MainWindow" Height="450" Width="800">
+        Title="KeyPulse" Height="600" Width="800">
     <Grid>
-
+        <TabControl>
+            <TabItem Header="Connected Devices">
+                <views:DeviceListView />
+            </TabItem>
+        </TabControl>
     </Grid>
 </Window>
