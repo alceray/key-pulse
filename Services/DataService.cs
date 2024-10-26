@@ -28,45 +28,46 @@ namespace KeyPulse.Services
 
         private void InitializeDatabase()
         {
-            if (!File.Exists(_databasePath))
-            {
-                SQLiteConnection.CreateFile(_databasePath);
+            if (File.Exists(_databasePath)) return;
 
-                using var connection = new SQLiteConnection(_connectionString);
-                connection.Open();
-                string createTableQuery = @"CREATE TABLE Devices (
-                        DeviceID TEXT PRIMARY KEY,
-                        PnpDeviceID TEXT,
-                        VID TEXT,
-                        PID TEXT,
-                        DeviceName TEXT
-                    );";
-                using var command = new SQLiteCommand(createTableQuery, connection);
-                command.ExecuteNonQuery();
-            }
+            SQLiteConnection.CreateFile(_databasePath);
+
+            using var connection = new SQLiteConnection(_connectionString);
+            connection.Open();
+            string createTableQuery = @"
+                CREATE TABLE Devices (
+                    DeviceID TEXT PRIMARY KEY NOT NULL,
+                    PnpDeviceID TEXT NOT NULL,
+                    VID TEXT NOT NULL,
+                    PID TEXT NOT NULL,
+                    DeviceName TEXT NOT NULL
+                );";
+            using var command = new SQLiteCommand(createTableQuery, connection);
+            command.ExecuteNonQuery();
         }
 
         public List<USBDeviceInfo> GetAllDevices()
         {
             List<USBDeviceInfo> devices = [];
-            using (SQLiteConnection connection = new(_connectionString))
+            using SQLiteConnection connection = new(_connectionString);
+            connection.Open();
+            string query = "SELECT * FROM Devices";
+            using var command = new SQLiteCommand(query, connection);
+            using var reader = command.ExecuteReader();
+
+            while (reader.Read())
             {
-                connection.Open();
-                string query = "SELECT * FROM Devices";
-                using var command = new SQLiteCommand(query, connection);
-                using var reader = command.ExecuteReader();
-                while (reader.Read())
+                var device = new USBDeviceInfo
                 {
-                    devices.Add(new USBDeviceInfo
-                    {
-                        DeviceID = reader["DeviceID"].ToString(),
-                        PnpDeviceID = reader["PnpDeviceID"].ToString(),
-                        VID = reader["VID"].ToString(),
-                        PID = reader["PID"].ToString(),
-                        DeviceName = reader["DeviceName"].ToString()
-                    });
-                }
+                    DeviceID = reader.GetString(reader.GetOrdinal("DeviceID")),
+                    PnpDeviceID = reader.GetString(reader.GetOrdinal("PnpDeviceID")),
+                    VID = reader.GetString(reader.GetOrdinal("VID")),
+                    PID = reader.GetString(reader.GetOrdinal("PID")),
+                    DeviceName = reader.GetString(reader.GetOrdinal("DeviceName"))
+                };
+                devices.Add(device);
             }
+
             return devices;
         }
 

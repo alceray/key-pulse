@@ -1,5 +1,4 @@
-﻿using System.Configuration;
-using System.Data;
+﻿using KeyPulse.Services;
 using System.Windows;
 
 namespace KeyPulse
@@ -9,6 +8,19 @@ namespace KeyPulse
     /// </summary>
     public partial class App : Application
     {
+        private USBMonitorService? usbMonitorService;
+
+        protected override void OnStartup(StartupEventArgs e)
+        {
+            base.OnStartup(e);
+            usbMonitorService = new USBMonitorService();
+        }
+
+        protected override void OnExit(ExitEventArgs e)
+        {
+            usbMonitorService?.Dispose();
+            base.OnExit(e);
+        }
     }
 
 }
