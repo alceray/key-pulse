@@ -11,7 +11,11 @@
     <Grid>
         <DataGrid ItemsSource="{Binding ConnectedDevices}" AutoGenerateColumns="False" IsReadOnly="True" Name="DevicesDataGrid" SelectionMode="Single">
             <DataGrid.Columns>
-                <DataGridTextColumn Header="Device Name" Binding="{Binding DeviceName}" Width="*"/>
+                <DataGridTextColumn Binding="{Binding DeviceName}" Width="*">
+                    <DataGridTextColumn.Header>
+                        <TextBlock Text="{Binding DataContext.DeviceNameHeader, ElementName=DevicesDataGrid}"/>
+                    </DataGridTextColumn.Header>
+                </DataGridTextColumn>
                 <DataGridTextColumn Header="VID" Binding="{Binding VID}" Width="Auto"/>
                 <DataGridTextColumn Header="PID" Binding="{Binding PID}" Width="Auto"/>
             </DataGrid.Columns>

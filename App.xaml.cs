@@ -8,17 +8,13 @@ namespace KeyPulse
     /// </summary>
     public partial class App : Application
     {
-        private USBMonitorService? usbMonitorService;
-
         protected override void OnStartup(StartupEventArgs e)
         {
             base.OnStartup(e);
-            usbMonitorService = new USBMonitorService();
         }
 
         protected override void OnExit(ExitEventArgs e)
         {
-            usbMonitorService?.Dispose();
             base.OnExit(e);
         }
     }

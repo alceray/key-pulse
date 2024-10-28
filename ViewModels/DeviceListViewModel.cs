@@ -4,6 +4,7 @@ using KeyPulse.Services;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -28,12 +29,16 @@ namespace KeyPulse.ViewModels
             }
         }
 
+        public int DeviceCount => ConnectedDevices.Count;
+        public string DeviceNameHeader => $"Devices ({DeviceCount})";
         public ICommand RenameDeviceCommand { get; }
 
         public DeviceListViewModel()
         {
             _dataService = new DataService();
             ConnectedDevices = [];
+            ConnectedDevices.CollectionChanged += OnConnectedDevicesChanged;
+
             _usbMonitorService = new USBMonitorService();
             _usbMonitorService.DeviceInserted += OnDeviceInserted;
             _usbMonitorService.DeviceRemoved += OnDeviceRemoved;
@@ -54,7 +59,6 @@ namespace KeyPulse.ViewModels
                     _dataService.SaveDevice(device);
                 } else
                 {
-                    existingDevice.PnpDeviceID = device.PnpDeviceID;
                     existingDevice.DeviceName = device.DeviceName;
                     existingDevice.VID = device.VID;
                     existingDevice.PID = device.PID;
@@ -64,12 +68,18 @@ namespace KeyPulse.ViewModels
             RenameDeviceCommand = new RelayCommand(ExecuteRenameDevice, CanExecuteRenameDevice);
         }
 
+        private void OnConnectedDevicesChanged(object sender, NotifyCollectionChangedEventArgs e)
+        {
+            OnPropertyChanged(nameof(DeviceCount));
+            OnPropertyChanged(nameof(DeviceNameHeader));
+        }
+
         private void OnDeviceInserted(object sender, USBDeviceInfo device)
         {
             Application.Current.Dispatcher.Invoke(() =>
             {
                 var existingDevice = FindDevice(device.DeviceID);
-                if (existingDevice != null)
+                if (existingDevice == null)
                 {
                     ConnectedDevices.Add(device);
                     _dataService.SaveDevice(device);

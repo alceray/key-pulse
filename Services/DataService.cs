@@ -6,6 +6,7 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Data.SQLite;
 using KeyPulse.Models;
+using System.Windows;
 
 namespace KeyPulse.Services
 {
@@ -16,14 +17,20 @@ namespace KeyPulse.Services
 
         public DataService()
         {
-            string dataFolder = Path.Combine(Directory.GetCurrentDirectory(), "Data");
-            if (!Directory.Exists(dataFolder))
-            {
-                Directory.CreateDirectory(dataFolder);
-            }
-            _databasePath = Path.Combine(dataFolder, "devices.db");
+            _databasePath = GetDatabasePath();
             _connectionString = $"Data Source={_databasePath};Version=3;";
             InitializeDatabase();
+        }
+
+        public static string GetDatabasePath()
+        {
+            string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+            string appFolder = Path.Combine(appData, Application.Current?.MainWindow?.Title ?? "KeyPulse");
+            if (!Directory.Exists(appFolder))
+            {
+                Directory.CreateDirectory(appFolder);
+            }
+            return Path.Combine(appFolder, "devices.db");
         }
 
         private void InitializeDatabase()
@@ -37,7 +44,6 @@ namespace KeyPulse.Services
             string createTableQuery = @"
                 CREATE TABLE Devices (
                     DeviceID TEXT PRIMARY KEY NOT NULL,
-                    PnpDeviceID TEXT NOT NULL,
                     VID TEXT NOT NULL,
                     PID TEXT NOT NULL,
                     DeviceName TEXT NOT NULL
@@ -60,7 +66,6 @@ namespace KeyPulse.Services
                 var device = new USBDeviceInfo
                 {
                     DeviceID = reader.GetString(reader.GetOrdinal("DeviceID")),
-                    PnpDeviceID = reader.GetString(reader.GetOrdinal("PnpDeviceID")),
                     VID = reader.GetString(reader.GetOrdinal("VID")),
                     PID = reader.GetString(reader.GetOrdinal("PID")),
                     DeviceName = reader.GetString(reader.GetOrdinal("DeviceName"))
@@ -75,10 +80,9 @@ namespace KeyPulse.Services
         {
             using var connection = new SQLiteConnection(_connectionString);
             connection.Open();
-            string insertOrReplaceQuery = @"INSERT OR REPLACE INTO Devices (DeviceID, PnpDeviceID, VID, PID, DeviceName) VALUES (@DeviceID, @PnpDeviceID, @VID, @PID, @DeviceName);";
+            string insertOrReplaceQuery = @"INSERT OR REPLACE INTO Devices (DeviceID, VID, PID, DeviceName) VALUES (@DeviceID, @VID, @PID, @DeviceName);";
             using var command = new SQLiteCommand(insertOrReplaceQuery, connection);
             command.Parameters.AddWithValue("@DeviceID", device.DeviceID);
-            command.Parameters.AddWithValue("@PnpDeviceID", device.PnpDeviceID);
             command.Parameters.AddWithValue("@VID", device.VID);
             command.Parameters.AddWithValue("@PID", device.PID);
             command.Parameters.AddWithValue("@DeviceName", device.DeviceName);

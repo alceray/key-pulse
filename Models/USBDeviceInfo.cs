@@ -18,9 +18,6 @@ namespace KeyPulse.Models
         [Required]
         public required string DeviceID { get; set; } = string.Empty;
 
-        [Required]
-        public required string PnpDeviceID { get; set; } = string.Empty;
-
         public DeviceTypes DeviceType { get; set; } =  DeviceTypes.Unknown;
 
         [Required]
@@ -30,6 +27,6 @@ namespace KeyPulse.Models
         public required string PID { get; set; } = string.Empty;
 
         [Required]
-        public required string DeviceName { get; set; } = "Unknown Device";
+        public required string DeviceName { get; set; } = "";
     }
 }

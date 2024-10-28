@@ -1,6 +1,7 @@
 ﻿using KeyPulse.Models;
 using System.Diagnostics;
 using System.Management;
+using System.Net.NetworkInformation;
 
 namespace KeyPulse.Services
 {
@@ -8,9 +9,12 @@ namespace KeyPulse.Services
     {
         public event EventHandler<USBDeviceInfo>? DeviceInserted;
         public event EventHandler<USBDeviceInfo>? DeviceRemoved;
+
         private ManagementEventWatcher? _insertWatcher;
         private ManagementEventWatcher? _removeWatcher;
+
         private readonly List<USBDeviceInfo> _connectedDevices;
+        private readonly string _unknownDeviceName = "Unknown Device";
         private bool _disposed = false;
 
         public USBMonitorService() 
@@ -94,27 +98,27 @@ namespace KeyPulse.Services
 
             try
             {
-                //Console.WriteLine("Properties of ManagementBaseObject:");
+                string? deviceId = obj["DeviceID"]?.ToString();
+                string deviceName = obj["Name"]?.ToString() ?? _unknownDeviceName;
+                string? vid = GetValueFromDeviceId(deviceId, "VID_");
+                string? pid = GetValueFromDeviceId(deviceId, "PID_");
+                if (string.IsNullOrEmpty(deviceId) || string.IsNullOrEmpty(vid) || string.IsNullOrEmpty(pid)) return null;
+                deviceId = GetBaseDeviceId(deviceId);
+
+                //Console.WriteLine($"Properties of {deviceName}:");
                 //foreach (var property in obj.Properties)
                 //{
                 //    string name = property.Name;
                 //    object value = property.Value;
-                //    Console.WriteLine($"Name: {name}, Value: {value}");
+                //    if (!string.IsNullOrEmpty(name) && !string.IsNullOrEmpty(value?.ToString()))
+                //    {
+                //        Console.WriteLine($"{name}: {value}");
+                //    }
                 //}
-
-                string? deviceId = obj["DeviceID"]?.ToString();
-                string? pnpDeviceId = obj["PNPDeviceID"]?.ToString();
-                string deviceName = obj["Name"]?.ToString() ?? "Unknown Device";
-                string? vid = GetValueFromDeviceId(pnpDeviceId, "VID_");
-                string? pid = GetValueFromDeviceId(pnpDeviceId, "PID_");
-                
-                if (string.IsNullOrEmpty(deviceId) || string.IsNullOrEmpty(pnpDeviceId) || string.IsNullOrEmpty(vid) || string.IsNullOrEmpty(pid)) return null;
-                if (!IsUsbDevice(pnpDeviceId)) return null;
 
                 return new USBDeviceInfo
                 {
                     DeviceID = deviceId,
-                    PnpDeviceID = pnpDeviceId,
                     VID = vid,
                     PID = pid,
                     DeviceName = deviceName
@@ -122,15 +126,15 @@ namespace KeyPulse.Services
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"ManagementException in GetDeviceInfo: {ex.Message}");
+                Debug.WriteLine($"ManagementException in GetDeviceInfo: {ex.Message}");
                 return null;
             }
         }
 
-        private static bool IsUsbDevice(string? pnpDeviceId)
+        private static string GetBaseDeviceId(string deviceId)
         {
-            if (string.IsNullOrEmpty(pnpDeviceId)) return false;
-            return pnpDeviceId.StartsWith("USB\\", StringComparison.OrdinalIgnoreCase);
+            int miIndex = deviceId.IndexOf("&MI_", StringComparison.OrdinalIgnoreCase);
+            return miIndex >= 0 ? deviceId[..miIndex] : deviceId;
         }
 
         private static string GetValueFromDeviceId(string? deviceId, string identifier)
@@ -150,37 +154,31 @@ namespace KeyPulse.Services
             return deviceId[startIndex..endIndex];
         }
 
-        public void StopMonitoring()
-        {
-            Dispose();
-        }
-
         public List<USBDeviceInfo> GetConnectedDevices()
         {
-            // Return a copyo to prevent external modification
             return new List<USBDeviceInfo>(_connectedDevices);
         }
 
         public List<USBDeviceInfo> GetConnectedDevicesFromSystem()
         {
             List<USBDeviceInfo> connectedDevices = [];
-
-            // Retrieve all associations between USB controllers and connected devices
-            ManagementObjectSearcher searcher = new(@"Select * From Win32_USBControllerDevice");
+            ManagementObjectSearcher searcher = new(@"Select * from Win32_PnPEntity where Service = 'kbdhid' or Service = 'mouhid'");
             try
             {
-                foreach (ManagementBaseObject association in searcher.Get())
+                foreach (ManagementBaseObject device in searcher.Get())
                 {
-                    string? dependent = association["Dependent"]?.ToString();
-                    if (string.IsNullOrEmpty(dependent)) continue;
-
-                    ManagementPath dependentPath = new(dependent);
-                    using ManagementObject device = new(dependentPath);
-
                     USBDeviceInfo? deviceInfo = GetDeviceInfo(device);
                     if (deviceInfo != null)
                     {
-                        connectedDevices.Add(deviceInfo);
+                        var deviceInList = connectedDevices.Find(d => d.DeviceID == deviceInfo.DeviceID);
+                        if (deviceInList == null)
+                        {
+                            connectedDevices.Add(deviceInfo);
+                        } 
+                        else if (deviceInList.DeviceName != _unknownDeviceName)
+                        {
+                            deviceInList.DeviceName = _unknownDeviceName;
+                        }
                     }
                 }
             }
@@ -196,6 +194,11 @@ namespace KeyPulse.Services
         {
             Dispose(disposing: true);
             GC.SuppressFinalize(this);
+        }
+
+        public void StopMonitoring()
+        {
+            Dispose();
         }
 
         protected virtual void Dispose(bool disposing)
