@@ -27,6 +27,6 @@ namespace KeyPulse.Models
         public required string PID { get; set; } = string.Empty;
 
         [Required]
-        public required string DeviceName { get; set; } = "";
+        public required string DeviceName { get; set; } = string.Empty;
     }
 }
