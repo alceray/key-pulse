@@ -1,113 +1,109 @@
 ﻿using KeyPulse.Helpers;
 using KeyPulse.Models;
 using KeyPulse.Services;
+using Microsoft.VisualBasic;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
+using System.ComponentModel;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Data;
 using System.Windows.Input;
 
 namespace KeyPulse.ViewModels
 {
     public class DeviceListViewModel : ObservableObject
     {
-        private USBMonitorService _usbMonitorService;
-        private DataService _dataService;
+        private readonly USBMonitorService _usbMonitorService;
 
-        private ObservableCollection<USBDeviceInfo> _connectedDevices;
-        public ObservableCollection<USBDeviceInfo> ConnectedDevices
+        public ICollectionView ConnectedDevicesView
         {
-            get => _connectedDevices;
+            get => _connectedDevicesView;
             set
             {
-                _connectedDevices = value;
-                OnPropertyChanged();
+                _connectedDevicesView = value;
+                Application.Current.Dispatcher.Invoke(() => OnPropertyChanged(nameof(ConnectedDevicesView)));
             }
         }
+        private ICollectionView _connectedDevicesView = CollectionViewSource.GetDefaultView(new ObservableCollection<USBDeviceInfo>());
 
-        public int DeviceCount => ConnectedDevices.Count;
+        public bool ShowAllDevices
+        {
+            get => _showAllDevices;
+            set
+            {
+                if (_showAllDevices != value)
+                {
+                    _showAllDevices = value;
+                    Application.Current.Dispatcher.Invoke(() =>
+                    {
+                        ConnectedDevicesView.Refresh();
+                        OnPropertyChanged(nameof(ShowAllDevices));
+                        OnPropertyChanged(nameof(DeviceCount));
+                        OnPropertyChanged(nameof(DeviceNameHeader));
+                    });
+                }
+            }
+        }
+        private bool _showAllDevices = false;
+
+        public int DeviceCount => ConnectedDevicesView.Cast<object>().Count();
         public string DeviceNameHeader => $"Devices ({DeviceCount})";
         public ICommand RenameDeviceCommand { get; }
 
         public DeviceListViewModel()
         {
-            _dataService = new DataService();
-            ConnectedDevices = [];
-            ConnectedDevices.CollectionChanged += OnConnectedDevicesChanged;
-
             _usbMonitorService = new USBMonitorService();
-            _usbMonitorService.DeviceInserted += OnDeviceInserted;
-            _usbMonitorService.DeviceRemoved += OnDeviceRemoved;
 
-            var savedDevices = _dataService.GetAllDevices();
-            foreach (var device in savedDevices)
+            ConnectedDevicesView = CollectionViewSource.GetDefaultView(_usbMonitorService.ConnectedDevices);
+            ConnectedDevicesView.Filter = device =>
             {
-                ConnectedDevices.Add(device);
-            }
+                var usbDevice = (USBDeviceInfo)device;
+                return ShowAllDevices || usbDevice.IsConnected;
+            };
 
-            var currentDevices = _usbMonitorService.GetConnectedDevices();
-            foreach (var device in currentDevices)
+            foreach (var device in _usbMonitorService.ConnectedDevices)
             {
-                var existingDevice = FindDevice(device.DeviceID);
-                if (existingDevice == null)
-                {
-                    ConnectedDevices.Add(device);
-                    _dataService.SaveDevice(device);
-                } else
-                {
-                    existingDevice.DeviceName = device.DeviceName;
-                    existingDevice.VID = device.VID;
-                    existingDevice.PID = device.PID;
-                }
+                device.PropertyChanged += Device_PropertyChanged;
             }
+            _usbMonitorService.ConnectedDevices.CollectionChanged += ConnectedDevices_CollectionChanged;
 
             RenameDeviceCommand = new RelayCommand(ExecuteRenameDevice, CanExecuteRenameDevice);
         }
 
-        private void OnConnectedDevicesChanged(object sender, NotifyCollectionChangedEventArgs e)
+        private void Device_PropertyChanged(object? sender, PropertyChangedEventArgs e)
         {
-            OnPropertyChanged(nameof(DeviceCount));
-            OnPropertyChanged(nameof(DeviceNameHeader));
-        }
-
-        private void OnDeviceInserted(object sender, USBDeviceInfo device)
-        {
-            Application.Current.Dispatcher.Invoke(() =>
+            if (e.PropertyName == nameof(USBDeviceInfo.IsConnected))
             {
-                var existingDevice = FindDevice(device.DeviceID);
-                if (existingDevice == null)
+                Application.Current.Dispatcher.Invoke(() =>
                 {
-                    ConnectedDevices.Add(device);
-                    _dataService.SaveDevice(device);
-                }
-            });
+                    ConnectedDevicesView.Refresh();
+                    OnPropertyChanged(nameof(DeviceCount));
+                    OnPropertyChanged(nameof(DeviceNameHeader));
+                });
+            } 
         }
 
-        private void OnDeviceRemoved(object sender, USBDeviceInfo device)
+        private void ConnectedDevices_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
         {
-            Application.Current.Dispatcher.Invoke(() =>
+            if (e.NewItems != null)
             {
-                var deviceToRemove = FindDevice(device.DeviceID);
-                if (deviceToRemove != null)
+                foreach (USBDeviceInfo device in e.NewItems)
                 {
-                    ConnectedDevices.Remove(deviceToRemove);
-                    //_dataService.DeleteDevice(device.DeviceID);
+                    device.PropertyChanged += Device_PropertyChanged;
                 }
-            });
-        }
-
-        private USBDeviceInfo? FindDevice(string deviceId)
-        {
-            foreach (var device in ConnectedDevices)
-            {
-                if (device.DeviceID == deviceId)
-                    return device;
             }
-            return null;
+
+            Application.Current.Dispatcher.Invoke(() =>
+            {
+                ConnectedDevicesView.Refresh();
+                OnPropertyChanged(nameof(DeviceCount));
+                OnPropertyChanged(nameof(DeviceNameHeader));
+            });
         }
 
         private void ExecuteRenameDevice(object parameter)
@@ -118,8 +114,7 @@ namespace KeyPulse.ViewModels
                 if (!string.IsNullOrWhiteSpace(newName))
                 {
                     device.DeviceName = newName;
-                    _dataService.SaveDevice(device);
-                    OnPropertyChanged(nameof(ConnectedDevices));
+                    Application.Current.Dispatcher.Invoke(() => OnPropertyChanged(nameof(device.DeviceName)));
                 }    
             }
         }
@@ -131,7 +126,7 @@ namespace KeyPulse.ViewModels
 
         private string PromptForDeviceName(string currentName)
         {
-            return Microsoft.VisualBasic.Interaction.InputBox("Enter new name for the device:", "Rename Device", currentName);
+            return Interaction.InputBox("Enter new name for the device:", "Rename Device", currentName);
         }
     }
 }

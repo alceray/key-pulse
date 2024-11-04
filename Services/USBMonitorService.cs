@@ -1,36 +1,83 @@
 ﻿using KeyPulse.Models;
+using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Management;
 using System.Net.NetworkInformation;
+using System.Windows;
+using static KeyPulse.Models.USBDeviceInfo;
 
 namespace KeyPulse.Services
 {
     public class USBMonitorService : IDisposable
     {
-        public event EventHandler<USBDeviceInfo>? DeviceInserted;
-        public event EventHandler<USBDeviceInfo>? DeviceRemoved;
-
         private ManagementEventWatcher? _insertWatcher;
         private ManagementEventWatcher? _removeWatcher;
 
-        private readonly List<USBDeviceInfo> _connectedDevices;
+        public ObservableCollection<USBDeviceInfo> ConnectedDevices => _connectedDevices;
+        private readonly ObservableCollection<USBDeviceInfo> _connectedDevices;
+
+        private readonly DataService _dataService;
         private readonly string _unknownDeviceName = "Unknown Device";
         private bool _disposed = false;
 
         public USBMonitorService() 
         {
-            _connectedDevices = GetConnectedDevicesFromSystem();
+            _connectedDevices = [];
+            _dataService = new DataService();
+            InitializeDevices();
             StartMonitoring();
+        }
+
+        private void InitializeDevices()
+        {
+            // get devices from the database
+            var savedDevices = _dataService.GetAllDevices();
+            // get currently connected devices
+            var currentDevices = GetConnectedDevicesFromSystem();
+
+            // add devices that are saved but not in the collection
+            foreach (var device in savedDevices)
+            {
+                device.PropertyChanged += Device_PropertyChanged;
+                if (currentDevices.Any(d => d.DeviceID == device.DeviceID))
+                {
+                    device.IsConnected = true;
+                } else
+                {
+                    device.IsConnected = false;
+                }
+                _connectedDevices.Add(device);
+            }
+
+            // add devices that are currently connected but not in the database
+            foreach (var device in currentDevices)
+            {
+                if (!savedDevices.Any(d => d.DeviceID == device.DeviceID))
+                {
+                    device.IsConnected = true;
+                    device.PropertyChanged += Device_PropertyChanged;
+                    _connectedDevices.Add(device);
+                    _dataService.SaveDevice(device);
+                }
+            }
         }
 
         public void StartMonitoring()
         {
-            WqlEventQuery insertQuery = new WqlEventQuery("SELECT * FROM __InstanceCreationEvent WITHIN 2 WHERE TargetInstance ISA 'Win32_USBControllerDevice'");
+            WqlEventQuery insertQuery = new(@"
+                SELECT * FROM __InstanceCreationEvent WITHIN 2 
+                WHERE TargetInstance ISA 'Win32_PnPEntity' 
+                AND (TargetInstance.Service = 'kbdhid' OR TargetInstance.Service = 'mouhid')
+            ");
             _insertWatcher = new ManagementEventWatcher(insertQuery);
             _insertWatcher.EventArrived += DeviceInsertedEvent;
             _insertWatcher.Start();
 
-            WqlEventQuery removeQuery = new WqlEventQuery("SELECT * FROM __InstanceDeletionEVent WITHIN 2 WHERE TargetInstance ISA 'Win32_USBControllerDevice'");
+            WqlEventQuery removeQuery = new(@"
+                SELECT * FROM __InstanceDeletionEvent WITHIN 2 
+                WHERE TargetInstance ISA 'Win32_PnPEntity' 
+                AND (TargetInstance.Service = 'kbdhid' OR TargetInstance.Service = 'mouhid')
+            ");
             _removeWatcher = new ManagementEventWatcher(removeQuery);
             _removeWatcher.EventArrived += DeviceRemovedEvent;
             _removeWatcher.Start();
@@ -43,17 +90,27 @@ namespace KeyPulse.Services
             try
             {
                 ManagementBaseObject? instance = (ManagementBaseObject?)e.NewEvent["TargetInstance"];
-                string? dependent = instance?["Dependent"]?.ToString();
-                if (string.IsNullOrEmpty(dependent)) return;
+                if (instance == null) return;
 
-                ManagementPath dependentPath = new(dependent);
-                using ManagementObject device = new(dependentPath);
-
-                USBDeviceInfo? deviceInfo = GetDeviceInfo(device);
+                USBDeviceInfo? deviceInfo = GetDeviceInfo(instance);
                 if (deviceInfo != null)
                 {
-                    _connectedDevices.Add(deviceInfo);
-                    DeviceInserted?.Invoke(this, deviceInfo);
+                    Application.Current.Dispatcher.Invoke(() =>
+                    {
+                        var existingDevice = _connectedDevices.FirstOrDefault(d => d.DeviceID == deviceInfo.DeviceID);
+                        if (existingDevice == null)
+                        {
+                            deviceInfo.IsConnected = true;
+                            deviceInfo.PropertyChanged += Device_PropertyChanged;
+                            _connectedDevices.Add(deviceInfo);
+                            _dataService.SaveDevice(deviceInfo);
+                        }
+                        else
+                        {
+                            existingDevice.IsConnected = true;
+                            _dataService.SaveDevice(existingDevice);
+                        }
+                    });
                 }
             }
             catch (Exception ex)
@@ -69,21 +126,20 @@ namespace KeyPulse.Services
             try
             {
                 ManagementBaseObject? instance = (ManagementBaseObject?)e.NewEvent["TargetInstance"];
-                string? dependent = instance?["Dependent"]?.ToString();
-                if (string.IsNullOrEmpty(dependent)) return;
+                if (instance == null) return; 
 
-                ManagementPath dependentPath = new(dependent);
-                using ManagementObject device = new(dependentPath);
-
-                USBDeviceInfo? deviceInfo = GetDeviceInfo(device);
+                USBDeviceInfo? deviceInfo = GetDeviceInfo(instance);
                 if (deviceInfo != null)
                 {
-                    var deviceToRemove = _connectedDevices.FirstOrDefault(d => d.DeviceID == deviceInfo.DeviceID);
-                    if (deviceToRemove != null)
+                    Application.Current.Dispatcher.Invoke(() =>
                     {
-                        _connectedDevices.Remove(deviceInfo);
-                    }
-                    DeviceRemoved?.Invoke(this, deviceInfo);
+                        var existingDevice = _connectedDevices.FirstOrDefault(d => d.DeviceID == deviceInfo.DeviceID);
+                        if (existingDevice != null)
+                        {
+                            existingDevice.IsConnected = false;
+                            _dataService.SaveDevice(existingDevice);
+                        }
+                    });
                 }
             }
             catch (Exception ex)
@@ -98,12 +154,15 @@ namespace KeyPulse.Services
 
             try
             {
-                string? deviceId = obj["DeviceID"]?.ToString();
-                string deviceName = obj["Name"]?.ToString() ?? _unknownDeviceName;
-                string? vid = GetValueFromDeviceId(deviceId, "VID_");
-                string? pid = GetValueFromDeviceId(deviceId, "PID_");
-                if (string.IsNullOrEmpty(deviceId) || string.IsNullOrEmpty(vid) || string.IsNullOrEmpty(pid)) return null;
-                deviceId = GetBaseDeviceId(deviceId);
+                string? hidDeviceId = obj.GetPropertyValue("DeviceID")?.ToString();
+                if (string.IsNullOrEmpty(hidDeviceId)) return null;
+
+                string? vid = GetValueFromDeviceId(hidDeviceId, "VID_");
+                string? pid = GetValueFromDeviceId(hidDeviceId, "PID_");
+                if (string.IsNullOrEmpty(vid) || string.IsNullOrEmpty(pid)) return null;
+
+                string deviceName = obj.GetPropertyValue("Name")?.ToString() ?? _unknownDeviceName;
+                string deviceId = $"USB\\VID_{vid}&PID_{pid}";
 
                 //Console.WriteLine($"Properties of {deviceName}:");
                 //foreach (var property in obj.Properties)
@@ -121,7 +180,8 @@ namespace KeyPulse.Services
                     DeviceID = deviceId,
                     VID = vid,
                     PID = pid,
-                    DeviceName = deviceName
+                    DeviceName = deviceName,
+                    IsConnected = true,
                 };
             }
             catch (Exception ex)
@@ -154,15 +214,13 @@ namespace KeyPulse.Services
             return deviceId[startIndex..endIndex];
         }
 
-        public List<USBDeviceInfo> GetConnectedDevices()
-        {
-            return new List<USBDeviceInfo>(_connectedDevices);
-        }
-
         public List<USBDeviceInfo> GetConnectedDevicesFromSystem()
         {
             List<USBDeviceInfo> connectedDevices = [];
-            ManagementObjectSearcher searcher = new(@"Select * from Win32_PnPEntity where Service = 'kbdhid' or Service = 'mouhid'");
+            ManagementObjectSearcher searcher = new(@"
+                SELECT * FROM Win32_PnPEntity 
+                WHERE Service = 'kbdhid' OR Service = 'mouhid'
+            ");
             try
             {
                 foreach (ManagementBaseObject device in searcher.Get())
@@ -170,14 +228,13 @@ namespace KeyPulse.Services
                     USBDeviceInfo? deviceInfo = GetDeviceInfo(device);
                     if (deviceInfo != null)
                     {
-                        var deviceInList = connectedDevices.Find(d => d.DeviceID == deviceInfo.DeviceID);
-                        if (deviceInList == null)
+                        var existingDevice = connectedDevices.Find(d => d.DeviceID == deviceInfo.DeviceID);
+                        if (existingDevice == null)
                         {
                             connectedDevices.Add(deviceInfo);
-                        } 
-                        else if (deviceInList.DeviceName != _unknownDeviceName)
+                        } else 
                         {
-                            deviceInList.DeviceName = _unknownDeviceName;
+                            existingDevice.DeviceName = _unknownDeviceName;
                         }
                     }
                 }
@@ -188,6 +245,16 @@ namespace KeyPulse.Services
             }
                 
              return connectedDevices;
+        }
+        private void Device_PropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            if (sender is USBDeviceInfo device)
+            {
+                if (e.PropertyName == nameof(USBDeviceInfo.DeviceName))
+                {
+                    _dataService.SaveDevice(device);
+                }
+            }
         }
 
         public void Dispose()

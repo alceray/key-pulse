@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using KeyPulse.Models;
 using System.Windows;
 using KeyPulse.Data;
+using Microsoft.EntityFrameworkCore;
 
 namespace KeyPulse.Services
 {
@@ -33,9 +34,9 @@ namespace KeyPulse.Services
 
         private void InitializeDatabase()
         {
-            if (File.Exists(_databasePath)) return;
+            //if (File.Exists(_databasePath)) return;
             using var context = new ApplicationDbContext();
-            context.Database.EnsureCreated();
+            context.Database.Migrate();
         }
 
         public List<USBDeviceInfo> GetAllDevices()
