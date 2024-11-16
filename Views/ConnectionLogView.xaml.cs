@@ -7,15 +7,14 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Controls;
 
-
 namespace KeyPulse.Views
 {
-    public partial class DeviceListView : UserControl
+    public partial class ConnectionLogView : UserControl
     {
-        public DeviceListView()
+        public ConnectionLogView()
         {
             InitializeComponent();
-            DataContext = App.ServiceProvider.GetRequiredService<DeviceListViewModel>();
+            DataContext = App.ServiceProvider.GetRequiredService<ConnectionLogViewModel>();
         }
     }
 }

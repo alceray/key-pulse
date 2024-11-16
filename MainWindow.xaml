@@ -9,8 +9,11 @@
         Title="KeyPulse" Height="600" Width="800">
     <Grid>
         <TabControl>
-            <TabItem Header="Connected Devices">
+            <TabItem Header="Devices">
                 <views:DeviceListView />
+            </TabItem>
+            <TabItem Header="Connection Log">
+                <views:ConnectionLogView />
             </TabItem>
         </TabControl>
     </Grid>

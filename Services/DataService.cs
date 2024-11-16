@@ -8,23 +8,26 @@ using KeyPulse.Models;
 using System.Windows;
 using KeyPulse.Data;
 using Microsoft.EntityFrameworkCore;
+using System.Reflection;
+using System.Diagnostics;
 
 namespace KeyPulse.Services
 {
     public class DataService
     {
-        private readonly string _databasePath;
+        private readonly ApplicationDbContext _context;
 
-        public DataService()
+        public DataService(ApplicationDbContext context)
         {
-            _databasePath = GetDatabasePath();
+            _context = context;
             InitializeDatabase();
         }
 
         public static string GetDatabasePath()
         {
             string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-            string appFolder = Path.Combine(appData, Application.Current?.MainWindow?.Title ?? "KeyPulse");
+            string appName = Assembly.GetExecutingAssembly().GetName().Name ?? "KeyPulse";
+            string appFolder = Path.Combine(appData, appName);
             if (!Directory.Exists(appFolder))
             {
                 Directory.CreateDirectory(appFolder);
@@ -34,41 +37,65 @@ namespace KeyPulse.Services
 
         private void InitializeDatabase()
         {
-            //if (File.Exists(_databasePath)) return;
-            using var context = new ApplicationDbContext();
-            context.Database.Migrate();
+            _context.Database.Migrate();
         }
 
-        public List<USBDeviceInfo> GetAllDevices()
+        public IReadOnlyCollection<DeviceInfo> GetAllDevices()
         {
-            using var context = new ApplicationDbContext();
-            return context.Devices.ToList();
+            return _context.Devices.ToList().AsReadOnly();
         }
 
-        public void SaveDevice(USBDeviceInfo device)
+        public void SaveDevice(DeviceInfo device)
         {
-            using var context = new ApplicationDbContext();
-            var existingDevice = context.Devices.Find(device.DeviceID);
-            if (existingDevice == null)
+            try
             {
-                context.Devices.Add(device);
+                _context.Update(device);
+                _context.SaveChanges();
             }
-            else
+            catch (Exception ex)
             {
-                context.Entry(existingDevice).CurrentValues.SetValues(device);
+                Debug.WriteLine($"Exception in SaveDevice: {ex.Message}");
             }
-            context.SaveChanges();
         }
 
-        public void DeleteDevice(string deviceId)
+        public bool DeviceExists(string deviceId)
         {
-            using var context = new ApplicationDbContext();
-            var device = context.Devices.Find(deviceId);
-            if (device != null)
+            return _context.Devices.Find(deviceId) != null;
+        }
+
+        public IReadOnlyCollection<Connection> GetAllConnections(string? deviceId = null, bool onlyActive = false)
+        {
+            var query = _context.Connections.AsQueryable();
+
+            if (onlyActive)
             {
-                context.Devices.Remove(device);
-                context.SaveChanges();
+                query = query.Where(c => c.DisconnectedAt == null);
             }
+            if (!string.IsNullOrEmpty(deviceId))
+            {
+                query = query.Where(c => c.DeviceID == deviceId);
+            }
+
+            return query.ToList().AsReadOnly();
+        }
+
+        public void SaveConnection(Connection connection)
+        {
+            try { 
+                _context.Update(connection);
+                _context.SaveChanges();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Exception in SaveConnection: {ex.Message}");
+            }
+        }
+
+        public bool ActiveConnectionExists(string? deviceId = null)
+        {
+            return deviceId == null
+                ? _context.Connections.Any(c => c.DisconnectedAt == null)
+                : _context.Connections.Any(c => c.DeviceID == deviceId && c.DisconnectedAt == null);
         }
     }
 }

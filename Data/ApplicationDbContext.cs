@@ -8,28 +8,23 @@ using Microsoft.EntityFrameworkCore;
 
 namespace KeyPulse.Data
 {
-    internal class ApplicationDbContext : DbContext
+    public class ApplicationDbContext : DbContext
     {
-        public DbSet<USBDeviceInfo> Devices { get; set; }
-
-        private string _databasePath;
-
-        public ApplicationDbContext()
-        {
-            _databasePath = DataService.GetDatabasePath();
-        }
+        public DbSet<DeviceInfo> Devices { get; set; }
+        public DbSet<Connection> Connections { get; set; }
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
-            if (!optionsBuilder.IsConfigured)
-            {
-                optionsBuilder.UseSqlite($"Data Source={_databasePath}");
-            }
+            var databasePath = DataService.GetDatabasePath();
+            optionsBuilder
+                .UseLazyLoadingProxies()
+                .UseSqlite($"Data Source={databasePath}");
         }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
-            modelBuilder.Entity<USBDeviceInfo>().ToTable("Devices");
+            modelBuilder.Entity<DeviceInfo>().ToTable("Devices");
+            modelBuilder.Entity<Connection>().ToTable("Connections");
         }
     }
 }

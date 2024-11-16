@@ -1,4 +1,6 @@
-﻿using System.Text;
+﻿using KeyPulse.ViewModels;
+using Microsoft.Extensions.DependencyInjection;
+using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;

@@ -16,20 +16,13 @@ using System.Windows.Input;
 
 namespace KeyPulse.ViewModels
 {
-    public class DeviceListViewModel : ObservableObject
+    public class DeviceListViewModel : ObservableObject, IDisposable
     {
         private readonly USBMonitorService _usbMonitorService;
+        public ICollectionView AllDevicesCollView { get; }
 
-        public ICollectionView ConnectedDevicesView
-        {
-            get => _connectedDevicesView;
-            set
-            {
-                _connectedDevicesView = value;
-                Application.Current.Dispatcher.Invoke(() => OnPropertyChanged(nameof(ConnectedDevicesView)));
-            }
-        }
-        private ICollectionView _connectedDevicesView = CollectionViewSource.GetDefaultView(new ObservableCollection<USBDeviceInfo>());
+        public ICommand RenameDeviceCommand { get; }
+        public string DeviceNameHeader => $"Devices ({AllDevicesCollView.Cast<object>().Count()})";
 
         public bool ShowAllDevices
         {
@@ -39,94 +32,76 @@ namespace KeyPulse.ViewModels
                 if (_showAllDevices != value)
                 {
                     _showAllDevices = value;
-                    Application.Current.Dispatcher.Invoke(() =>
-                    {
-                        ConnectedDevicesView.Refresh();
-                        OnPropertyChanged(nameof(ShowAllDevices));
-                        OnPropertyChanged(nameof(DeviceCount));
-                        OnPropertyChanged(nameof(DeviceNameHeader));
-                    });
+                    Application.Current.Dispatcher.Invoke(() => AllDevicesCollView.Refresh());
+                    OnPropertyChanged(nameof(ShowAllDevices));
+                    OnPropertyChanged(nameof(DeviceNameHeader));
                 }
             }
         }
         private bool _showAllDevices = false;
 
-        public int DeviceCount => ConnectedDevicesView.Cast<object>().Count();
-        public string DeviceNameHeader => $"Devices ({DeviceCount})";
-        public ICommand RenameDeviceCommand { get; }
-
-        public DeviceListViewModel()
+        public DeviceListViewModel(USBMonitorService usbMonitorService)
         {
-            _usbMonitorService = new USBMonitorService();
+            _usbMonitorService = usbMonitorService;
 
-            ConnectedDevicesView = CollectionViewSource.GetDefaultView(_usbMonitorService.ConnectedDevices);
-            ConnectedDevicesView.Filter = device =>
-            {
-                var usbDevice = (USBDeviceInfo)device;
-                return ShowAllDevices || usbDevice.IsConnected;
-            };
+            AllDevicesCollView = CollectionViewSource.GetDefaultView(_usbMonitorService.AllDevices);
+            AllDevicesCollView.Filter = device => ShowAllDevices || ((DeviceInfo)device).IsConnected;
 
-            foreach (var device in _usbMonitorService.ConnectedDevices)
-            {
+            foreach (var device in _usbMonitorService.AllDevices)
                 device.PropertyChanged += Device_PropertyChanged;
-            }
-            _usbMonitorService.ConnectedDevices.CollectionChanged += ConnectedDevices_CollectionChanged;
+
+            _usbMonitorService.AllDevices.CollectionChanged += ConnectedDevices_CollectionChanged;
 
             RenameDeviceCommand = new RelayCommand(ExecuteRenameDevice, CanExecuteRenameDevice);
         }
 
         private void Device_PropertyChanged(object? sender, PropertyChangedEventArgs e)
         {
-            if (e.PropertyName == nameof(USBDeviceInfo.IsConnected))
+            if (e.PropertyName == nameof(DeviceInfo.IsConnected))
             {
-                Application.Current.Dispatcher.Invoke(() =>
-                {
-                    ConnectedDevicesView.Refresh();
-                    OnPropertyChanged(nameof(DeviceCount));
-                    OnPropertyChanged(nameof(DeviceNameHeader));
-                });
-            } 
+                Application.Current.Dispatcher.Invoke(() => AllDevicesCollView.Refresh());
+                OnPropertyChanged(nameof(DeviceNameHeader));
+            }
         }
 
         private void ConnectedDevices_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
         {
             if (e.NewItems != null)
             {
-                foreach (USBDeviceInfo device in e.NewItems)
-                {
+                foreach (DeviceInfo device in e.NewItems)
                     device.PropertyChanged += Device_PropertyChanged;
-                }
             }
 
-            Application.Current.Dispatcher.Invoke(() =>
-            {
-                ConnectedDevicesView.Refresh();
-                OnPropertyChanged(nameof(DeviceCount));
-                OnPropertyChanged(nameof(DeviceNameHeader));
-            });
+            Application.Current.Dispatcher.Invoke(() => AllDevicesCollView.Refresh());
+            OnPropertyChanged(nameof(DeviceNameHeader));
         }
 
         private void ExecuteRenameDevice(object parameter)
         {
-            if (parameter is USBDeviceInfo device)
+            if (parameter is DeviceInfo device)
             {
                 string newName = PromptForDeviceName(device.DeviceName);
                 if (!string.IsNullOrWhiteSpace(newName))
                 {
                     device.DeviceName = newName;
-                    Application.Current.Dispatcher.Invoke(() => OnPropertyChanged(nameof(device.DeviceName)));
+                    OnPropertyChanged(nameof(device.DeviceName));
                 }    
             }
         }
 
-        private bool CanExecuteRenameDevice(object parameter)
-        {
-            return parameter is USBDeviceInfo;
-        }
+        private bool CanExecuteRenameDevice(object parameter) => parameter is DeviceInfo;
 
-        private string PromptForDeviceName(string currentName)
+        private static string PromptForDeviceName(string currentName) => 
+            Interaction.InputBox("Enter new name for the device:", "Rename Device", currentName);
+
+        public void Dispose()
         {
-            return Interaction.InputBox("Enter new name for the device:", "Rename Device", currentName);
+            foreach (var device in _usbMonitorService.AllDevices)
+                device.PropertyChanged -= Device_PropertyChanged;
+            
+            _usbMonitorService.AllDevices.CollectionChanged -= ConnectedDevices_CollectionChanged;
+            _usbMonitorService.Dispose();
+            GC.SuppressFinalize(this);
         }
     }
 }

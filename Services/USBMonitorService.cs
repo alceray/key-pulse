@@ -1,10 +1,11 @@
-﻿using KeyPulse.Models;
+﻿using KeyPulse.Data;
+using KeyPulse.Models;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Management;
 using System.Net.NetworkInformation;
 using System.Windows;
-using static KeyPulse.Models.USBDeviceInfo;
+using static KeyPulse.Models.DeviceInfo;
 
 namespace KeyPulse.Services
 {
@@ -13,142 +14,106 @@ namespace KeyPulse.Services
         private ManagementEventWatcher? _insertWatcher;
         private ManagementEventWatcher? _removeWatcher;
 
-        public ObservableCollection<USBDeviceInfo> ConnectedDevices => _connectedDevices;
-        private readonly ObservableCollection<USBDeviceInfo> _connectedDevices;
-
+        public ObservableCollection<DeviceInfo> AllDevices;
+        public ObservableCollection<Connection> ConnectionEvents;
+       
         private readonly DataService _dataService;
-        private readonly string _unknownDeviceName = "Unknown Device";
-        private bool _disposed = false;
+        private readonly string _unknownDeviceName;
+        private bool _disposed;
 
-        public USBMonitorService() 
+        public USBMonitorService(DataService dataService) 
         {
-            _connectedDevices = [];
-            _dataService = new DataService();
-            InitializeDevices();
+            _dataService = dataService;
+            AllDevices = new(_dataService.GetAllDevices());
+            ConnectionEvents = new(_dataService.GetAllConnections());
+            _unknownDeviceName = "Unknown Device";
+            _disposed = false;
+
+            SetCurrentDevicesFromSystem();
             StartMonitoring();
+
+            if (_dataService.ActiveConnectionExists())
+            {
+                Debug.WriteLine("Initialized with still active connection");
+            }
         }
-
-        private void InitializeDevices()
+                
+        private void AddOrUpdateDevice(DeviceInfo device)
         {
-            // get devices from the database
-            var savedDevices = _dataService.GetAllDevices();
-            // get currently connected devices
-            var currentDevices = GetConnectedDevicesFromSystem();
-
-            // add devices that are saved but not in the collection
-            foreach (var device in savedDevices)
+            var existingDevice = AllDevices.FirstOrDefault(d => d.DeviceID == device.DeviceID);
+            if (existingDevice == null)
             {
                 device.PropertyChanged += Device_PropertyChanged;
-                if (currentDevices.Any(d => d.DeviceID == device.DeviceID))
-                {
-                    device.IsConnected = true;
-                } else
-                {
-                    device.IsConnected = false;
-                }
-                _connectedDevices.Add(device);
+                AllDevices.Add(device);
+                _dataService.SaveDevice(device);
             }
-
-            // add devices that are currently connected but not in the database
-            foreach (var device in currentDevices)
+            else if (existingDevice.DeviceName != device.DeviceName || existingDevice.DeviceType != device.DeviceType)
             {
-                if (!savedDevices.Any(d => d.DeviceID == device.DeviceID))
-                {
-                    device.IsConnected = true;
-                    device.PropertyChanged += Device_PropertyChanged;
-                    _connectedDevices.Add(device);
-                    _dataService.SaveDevice(device);
-                }
+                existingDevice.DeviceName = device.DeviceName;
+                existingDevice.DeviceType = device.DeviceType;
+                _dataService.SaveDevice(device);
             }
         }
 
-        public void StartMonitoring()
+        private void UpdateOrAddConnection(Connection connection)
         {
-            WqlEventQuery insertQuery = new(@"
-                SELECT * FROM __InstanceCreationEvent WITHIN 2 
-                WHERE TargetInstance ISA 'Win32_PnPEntity' 
-                AND (TargetInstance.Service = 'kbdhid' OR TargetInstance.Service = 'mouhid')
-            ");
-            _insertWatcher = new ManagementEventWatcher(insertQuery);
-            _insertWatcher.EventArrived += DeviceInsertedEvent;
-            _insertWatcher.Start();
-
-            WqlEventQuery removeQuery = new(@"
-                SELECT * FROM __InstanceDeletionEvent WITHIN 2 
-                WHERE TargetInstance ISA 'Win32_PnPEntity' 
-                AND (TargetInstance.Service = 'kbdhid' OR TargetInstance.Service = 'mouhid')
-            ");
-            _removeWatcher = new ManagementEventWatcher(removeQuery);
-            _removeWatcher.EventArrived += DeviceRemovedEvent;
-            _removeWatcher.Start();
+            var existingConnection = ConnectionEvents.FirstOrDefault(c => c.ConnectionID == connection.ConnectionID);
+            if (existingConnection == null)
+            {
+                ConnectionEvents.Add(connection);
+            }
+            else
+            {
+                existingConnection.DisconnectedAt = connection.DisconnectedAt;
+            }
+            _dataService.SaveConnection(connection);
         }
 
         private void DeviceInsertedEvent(object sender, EventArrivedEventArgs e)
         {
-            if (_disposed) return;
+            ManagementBaseObject? instance = (ManagementBaseObject)e.NewEvent["TargetInstance"];
+            if (instance == null) return;
 
-            try
-            {
-                ManagementBaseObject? instance = (ManagementBaseObject?)e.NewEvent["TargetInstance"];
-                if (instance == null) return;
+            DeviceInfo? device = GetDeviceInfo(instance);
+            if (device == null) return;
 
-                USBDeviceInfo? deviceInfo = GetDeviceInfo(instance);
-                if (deviceInfo != null)
-                {
-                    Application.Current.Dispatcher.Invoke(() =>
-                    {
-                        var existingDevice = _connectedDevices.FirstOrDefault(d => d.DeviceID == deviceInfo.DeviceID);
-                        if (existingDevice == null)
-                        {
-                            deviceInfo.IsConnected = true;
-                            deviceInfo.PropertyChanged += Device_PropertyChanged;
-                            _connectedDevices.Add(deviceInfo);
-                            _dataService.SaveDevice(deviceInfo);
-                        }
-                        else
-                        {
-                            existingDevice.IsConnected = true;
-                            _dataService.SaveDevice(existingDevice);
-                        }
-                    });
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"Exception in DeviceInsertedEvent: {ex.Message}");
-            }
+            AddOrUpdateDevice(device);
+            CreateNewConnectionIfNeeded(device);
         }
 
         private void DeviceRemovedEvent(object sender, EventArrivedEventArgs e)
         {
-            if (_disposed) return;
+            ManagementBaseObject? instance = (ManagementBaseObject)e.NewEvent["TargetInstance"];
+            if (instance == null) return; 
 
-            try
+            DeviceInfo? device = GetDeviceInfo(instance);
+            if (device == null) return;
+                
+            if (_dataService.DeviceExists(device.DeviceID))
             {
-                ManagementBaseObject? instance = (ManagementBaseObject?)e.NewEvent["TargetInstance"];
-                if (instance == null) return; 
-
-                USBDeviceInfo? deviceInfo = GetDeviceInfo(instance);
-                if (deviceInfo != null)
+                var activeConnections = _dataService.GetAllConnections(device.DeviceID, onlyActive: true);
+                if (activeConnections.Count == 1)
                 {
-                    Application.Current.Dispatcher.Invoke(() =>
-                    {
-                        var existingDevice = _connectedDevices.FirstOrDefault(d => d.DeviceID == deviceInfo.DeviceID);
-                        if (existingDevice != null)
-                        {
-                            existingDevice.IsConnected = false;
-                            _dataService.SaveDevice(existingDevice);
-                        }
-                    });
+                    Connection activeConnection = activeConnections.First();
+                    activeConnection.DisconnectedAt = DateTime.Now;
+                    UpdateOrAddConnection(activeConnection);
+                }
+                else if (activeConnections.Count > 1)
+                {
+                    Debug.WriteLine($"There are multiple active connections with DeviceID {device.DeviceID}");
+                }
+                else
+                {
+                    Debug.WriteLine($"There are no active connection with DeviceID {device.DeviceID}");
                 }
             }
-            catch (Exception ex)
+            else
             {
-                Debug.WriteLine($"Exception in DeviceRemovedEvent: {ex.Message}");
+                throw new Exception("Device removed was not saved");
             }
         }
 
-        private USBDeviceInfo? GetDeviceInfo(ManagementBaseObject obj) 
+        private DeviceInfo? GetDeviceInfo(ManagementBaseObject obj) 
         {
             if (obj == null) return null;
 
@@ -175,13 +140,12 @@ namespace KeyPulse.Services
                 //    }
                 //}
 
-                return new USBDeviceInfo
+                return new DeviceInfo
                 {
                     DeviceID = deviceId,
                     VID = vid,
                     PID = pid,
                     DeviceName = deviceName,
-                    IsConnected = true,
                 };
             }
             catch (Exception ex)
@@ -191,10 +155,13 @@ namespace KeyPulse.Services
             }
         }
 
-        private static string GetBaseDeviceId(string deviceId)
+        private void CreateNewConnectionIfNeeded(DeviceInfo device)
         {
-            int miIndex = deviceId.IndexOf("&MI_", StringComparison.OrdinalIgnoreCase);
-            return miIndex >= 0 ? deviceId[..miIndex] : deviceId;
+            if (!_dataService.ActiveConnectionExists(device.DeviceID))
+            {
+                Connection newConnection = new() { DeviceID = device.DeviceID };
+                UpdateOrAddConnection(newConnection);
+            }
         }
 
         private static string GetValueFromDeviceId(string? deviceId, string identifier)
@@ -214,46 +181,68 @@ namespace KeyPulse.Services
             return deviceId[startIndex..endIndex];
         }
 
-        public List<USBDeviceInfo> GetConnectedDevicesFromSystem()
+        private void Device_PropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
         {
-            List<USBDeviceInfo> connectedDevices = [];
-            ManagementObjectSearcher searcher = new(@"
-                SELECT * FROM Win32_PnPEntity 
-                WHERE Service = 'kbdhid' OR Service = 'mouhid'
-            ");
+            if (sender is DeviceInfo device)
+            {
+                if (e.PropertyName == nameof(DeviceInfo.DeviceName))
+                {
+                    AddOrUpdateDevice(device);
+                }
+            }
+        }
+
+        public void StartMonitoring()
+        {
+            if (_disposed) return;
+
             try
             {
-                foreach (ManagementBaseObject device in searcher.Get())
+                WqlEventQuery insertQuery = new(@"
+                    SELECT * FROM __InstanceCreationEvent WITHIN 2 
+                    WHERE TargetInstance ISA 'Win32_PnPEntity' 
+                    AND (TargetInstance.Service = 'kbdhid' OR TargetInstance.Service = 'mouhid')
+                ");
+                _insertWatcher = new ManagementEventWatcher(insertQuery);
+                _insertWatcher.EventArrived += DeviceInsertedEvent;
+                _insertWatcher.Start();
+
+                WqlEventQuery removeQuery = new(@"
+                    SELECT * FROM __InstanceDeletionEvent WITHIN 2 
+                    WHERE TargetInstance ISA 'Win32_PnPEntity' 
+                    AND (TargetInstance.Service = 'kbdhid' OR TargetInstance.Service = 'mouhid')
+                ");
+                _removeWatcher = new ManagementEventWatcher(removeQuery);
+                _removeWatcher.EventArrived += DeviceRemovedEvent;
+                _removeWatcher.Start();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Exception in StartMonitoring: {ex.Message}");
+            }
+        }
+
+        public void SetCurrentDevicesFromSystem()
+        {
+            try
+            {
+                ManagementObjectSearcher searcher = new(@"
+                    SELECT * FROM Win32_PnPEntity 
+                    WHERE Service = 'kbdhid' OR Service = 'mouhid'
+                ");
+                foreach (ManagementBaseObject obj in searcher.Get())
                 {
-                    USBDeviceInfo? deviceInfo = GetDeviceInfo(device);
-                    if (deviceInfo != null)
+                    DeviceInfo? device = GetDeviceInfo(obj);
+                    if (device != null)
                     {
-                        var existingDevice = connectedDevices.Find(d => d.DeviceID == deviceInfo.DeviceID);
-                        if (existingDevice == null)
-                        {
-                            connectedDevices.Add(deviceInfo);
-                        } else 
-                        {
-                            existingDevice.DeviceName = _unknownDeviceName;
-                        }
+                        AddOrUpdateDevice(device);
+                        CreateNewConnectionIfNeeded(device);
                     }
                 }
             }
             catch (Exception ex) 
             {
-                Debug.WriteLine($"Exception in GetConnectedDevicesFromSystem: {ex.Message}");
-            }
-                
-             return connectedDevices;
-        }
-        private void Device_PropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
-        {
-            if (sender is USBDeviceInfo device)
-            {
-                if (e.PropertyName == nameof(USBDeviceInfo.DeviceName))
-                {
-                    _dataService.SaveDevice(device);
-                }
+                Debug.WriteLine($"Exception in SetCurrentDevicesFromSystem: {ex.Message}");
             }
         }
 
@@ -263,17 +252,21 @@ namespace KeyPulse.Services
             GC.SuppressFinalize(this);
         }
 
-        public void StopMonitoring()
-        {
-            Dispose();
-        }
-
         protected virtual void Dispose(bool disposing)
         {
             if (_disposed) return;
 
             if (disposing)
             {
+                foreach (var connection in _dataService.GetAllConnections(onlyActive: true))
+                {
+                    connection.DisconnectedAt = DateTime.Now;
+                    _dataService.SaveConnection(connection);
+                }
+
+                foreach (var device in AllDevices)
+                    device.PropertyChanged -= Device_PropertyChanged;
+
                 if (_insertWatcher != null)
                 {
                     _insertWatcher.EventArrived -= DeviceInsertedEvent;

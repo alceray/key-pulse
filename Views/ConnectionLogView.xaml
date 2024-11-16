@@ -1,0 +1,20 @@
+﻿<UserControl xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    x:Class="KeyPulse.Views.ConnectionLogView"
+                    xmlns:vm="clr-namespace:KeyPulse.ViewModels"
+                    Height="Auto" Width="Auto">
+    <Grid>
+        <DataGrid ItemsSource="{Binding ConnectionLogCollView}"
+                  AutoGenerateColumns="False"
+                  IsReadOnly="True"
+                  CanUserSortColumns="False"
+                  CanUserReorderColumns="False">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="Device ID" Binding="{Binding DeviceID}" Width="*"/>
+                <DataGridTextColumn Header="Connection Timestamp" Binding="{Binding ConnectedAt, StringFormat=\{0:yyyy-MM-dd HH:mm:ss\}}" Width="Auto" />
+                <DataGridTextColumn Header="Disconnection Timestamp" Binding="{Binding DisconnectedAt, StringFormat=\{0:yyyy-MM-dd HH:mm:ss\}}" Width="Auto"/>
+                <DataGridTextColumn Header="Duration" Binding="{Binding Duration, StringFormat=\{0:hh\\:mm\\:ss\}}" Width="Auto"/>
+            </DataGrid.Columns>
+        </DataGrid>    
+    </Grid>
+</UserControl>
