@@ -12,8 +12,8 @@
             <TabItem Header="Devices">
                 <views:DeviceListView />
             </TabItem>
-            <TabItem Header="Connection Log">
-                <views:ConnectionLogView />
+            <TabItem Header="Event Log">
+                <views:EventLogView />
             </TabItem>
         </TabControl>
     </Grid>

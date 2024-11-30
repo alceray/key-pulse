@@ -40,62 +40,63 @@ namespace KeyPulse.Services
             _context.Database.Migrate();
         }
 
-        public IReadOnlyCollection<DeviceInfo> GetAllDevices()
+        public DeviceInfo? GetDevice(string deviceId)
         {
-            return _context.Devices.ToList().AsReadOnly();
+            return _context.Devices.Find(deviceId);
+        }
+
+        public IReadOnlyCollection<DeviceInfo> GetAllDevices(bool activeOnly = false)
+        {
+            return activeOnly
+                ? _context.Devices.Where(d => d.IsActive).ToList().AsReadOnly()
+                : _context.Devices.ToList().AsReadOnly();
         }
 
         public void SaveDevice(DeviceInfo device)
         {
             try
             {
-                _context.Update(device);
+                var existingDevice = _context.Devices.SingleOrDefault(d => d.DeviceId == device.DeviceId);
+                if (existingDevice != null)
+                {
+                    _context.Entry(existingDevice).CurrentValues.SetValues(device);
+                }
+                else
+                {
+                    _context.Devices.Add(device);
+                }
                 _context.SaveChanges();
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"Exception in SaveDevice: {ex.Message}");
+                Debug.WriteLine($"ERROR in SaveDevice: {ex.Message}");
             }
         }
 
-        public bool DeviceExists(string deviceId)
+        public bool IsAnyDeviceActive()
         {
-            return _context.Devices.Find(deviceId) != null;
+            return _context.Devices.Any(d => d.IsActive);
         }
 
-        public IReadOnlyCollection<Connection> GetAllConnections(string? deviceId = null, bool onlyActive = false)
+        public IReadOnlyCollection<DeviceEvent> GetAllDeviceEvents()
         {
-            var query = _context.Connections.AsQueryable();
-
-            if (onlyActive)
-            {
-                query = query.Where(c => c.DisconnectedAt == null);
-            }
-            if (!string.IsNullOrEmpty(deviceId))
-            {
-                query = query.Where(c => c.DeviceID == deviceId);
-            }
-
-            return query.ToList().AsReadOnly();
+            return _context.DeviceEvents.ToList().AsReadOnly();
         }
 
-        public void SaveConnection(Connection connection)
+        public void AddDeviceEvent(DeviceEvent deviceEvent)
         {
-            try { 
-                _context.Update(connection);
+            try {
+                _context.DeviceEvents.Add(deviceEvent);
                 _context.SaveChanges();
+            }
+            catch (DbUpdateException ex)
+            {
+                Debug.WriteLine($"Duplicate DeviceEvent skipped: {ex.Message}");
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"Exception in SaveConnection: {ex.Message}");
+                Debug.WriteLine($"ERROR in AddDeviceEvent: {ex.Message}");
             }
-        }
-
-        public bool ActiveConnectionExists(string? deviceId = null)
-        {
-            return deviceId == null
-                ? _context.Connections.Any(c => c.DisconnectedAt == null)
-                : _context.Connections.Any(c => c.DeviceID == deviceId && c.DisconnectedAt == null);
         }
     }
 }

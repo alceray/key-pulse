@@ -14,106 +14,145 @@ namespace KeyPulse.Services
         private ManagementEventWatcher? _insertWatcher;
         private ManagementEventWatcher? _removeWatcher;
 
-        public ObservableCollection<DeviceInfo> AllDevices;
-        public ObservableCollection<Connection> ConnectionEvents;
+        public ObservableCollection<DeviceInfo> DeviceList;
+        public ObservableCollection<DeviceEvent> DeviceEventList;
        
         private readonly DataService _dataService;
-        private readonly string _unknownDeviceName;
-        private bool _disposed;
+        private readonly HashSet<string> _recentlyProcessedDevices = [];
+        private readonly string _unknownDeviceName = "Unknown Device";
+        private bool _disposed = false;
 
         public USBMonitorService(DataService dataService) 
         {
             _dataService = dataService;
-            AllDevices = new(_dataService.GetAllDevices());
-            ConnectionEvents = new(_dataService.GetAllConnections());
-            _unknownDeviceName = "Unknown Device";
-            _disposed = false;
+            DeviceList = new(_dataService.GetAllDevices());
+            DeviceEventList = new(_dataService.GetAllDeviceEvents());
+
+            if (_dataService.IsAnyDeviceActive())
+            {
+                throw new InvalidOperationException("Cannot initialize usb monitor service with active devices");
+            }
 
             SetCurrentDevicesFromSystem();
             StartMonitoring();
-
-            if (_dataService.ActiveConnectionExists())
-            {
-                Debug.WriteLine("Initialized with still active connection");
-            }
         }
                 
-        private void AddOrUpdateDevice(DeviceInfo device)
+        private void UpsertDevice(DeviceInfo device, bool isActive)
         {
-            var existingDevice = AllDevices.FirstOrDefault(d => d.DeviceID == device.DeviceID);
-            if (existingDevice == null)
+            if (!DeviceList.Any(d => d.DeviceId == device.DeviceId))
             {
                 device.PropertyChanged += Device_PropertyChanged;
-                AllDevices.Add(device);
-                _dataService.SaveDevice(device);
+                Application.Current.Dispatcher.Invoke(() => DeviceList.Add(device));
             }
-            else if (existingDevice.DeviceName != device.DeviceName || existingDevice.DeviceType != device.DeviceType)
-            {
-                existingDevice.DeviceName = device.DeviceName;
-                existingDevice.DeviceType = device.DeviceType;
-                _dataService.SaveDevice(device);
-            }
+            device.IsActive = isActive;
+            _dataService.SaveDevice(device);
         }
 
-        private void UpdateOrAddConnection(Connection connection)
+        private void AddDeviceEvent(DeviceEvent deviceEvent)
         {
-            var existingConnection = ConnectionEvents.FirstOrDefault(c => c.ConnectionID == connection.ConnectionID);
-            if (existingConnection == null)
-            {
-                ConnectionEvents.Add(connection);
-            }
-            else
-            {
-                existingConnection.DisconnectedAt = connection.DisconnectedAt;
-            }
-            _dataService.SaveConnection(connection);
+            Application.Current.Dispatcher.Invoke(() => DeviceEventList.Add(deviceEvent));
+            _dataService.AddDeviceEvent(deviceEvent);
         }
 
         private void DeviceInsertedEvent(object sender, EventArrivedEventArgs e)
         {
-            ManagementBaseObject? instance = (ManagementBaseObject)e.NewEvent["TargetInstance"];
-            if (instance == null) return;
+            try
+            {
+                ManagementBaseObject? instance = (ManagementBaseObject)e.NewEvent["TargetInstance"];
+                if (instance == null) 
+                    return;
 
-            DeviceInfo? device = GetDeviceInfo(instance);
-            if (device == null) return;
+                string? deviceId = ExtractDeviceId(instance);
+                if (string.IsNullOrEmpty(deviceId)) 
+                    return;
 
-            AddOrUpdateDevice(device);
-            CreateNewConnectionIfNeeded(device);
+                // for every actual connection, 3 insert events are triggered within a very short timeframe, so this cache of
+                // recently processed devices helps to prevent inserting duplicate events in the db. this is merely a workaround
+                // and more work will be necessary for a foolproof solution. the delay was arbitrarily set to 0.2 seconds.
+                if (_recentlyProcessedDevices.Contains(deviceId)) 
+                    return;
+                _recentlyProcessedDevices.Add(deviceId);
+                Task.Delay(200).ContinueWith(_ => _recentlyProcessedDevices.Remove(deviceId));
+
+                DeviceInfo? device = _dataService.GetDevice(deviceId);
+                if (device == null) 
+                    return;
+
+                if (!device.IsActive)
+                {
+                    DeviceEvent deviceEvent = new()
+                    {
+                        DeviceId = deviceId,
+                        EventType = DeviceEventType.Connected
+                    };
+                    AddDeviceEvent(deviceEvent);
+                    UpsertDevice(device, isActive: true);
+                }
+                else
+                {
+                    throw new Exception($"Device with DeviceID {device.DeviceId} was already active");
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"ERROR in DeviceInsertedEvent: {ex.Message}");
+            }
         }
 
         private void DeviceRemovedEvent(object sender, EventArrivedEventArgs e)
         {
-            ManagementBaseObject? instance = (ManagementBaseObject)e.NewEvent["TargetInstance"];
-            if (instance == null) return; 
+            try { 
+                ManagementBaseObject? instance = (ManagementBaseObject)e.NewEvent["TargetInstance"];
+                if (instance == null) 
+                    return;
 
-            DeviceInfo? device = GetDeviceInfo(instance);
-            if (device == null) return;
-                
-            if (_dataService.DeviceExists(device.DeviceID))
-            {
-                var activeConnections = _dataService.GetAllConnections(device.DeviceID, onlyActive: true);
-                if (activeConnections.Count == 1)
+                string? deviceId = ExtractDeviceId(instance);
+                if (string.IsNullOrEmpty(deviceId))
+                    return;
+
+                DeviceInfo? device = _dataService.GetDevice(deviceId);
+                if (device == null)
+                    return;
+
+                if (device.IsActive)
                 {
-                    Connection activeConnection = activeConnections.First();
-                    activeConnection.DisconnectedAt = DateTime.Now;
-                    UpdateOrAddConnection(activeConnection);
-                }
-                else if (activeConnections.Count > 1)
-                {
-                    Debug.WriteLine($"There are multiple active connections with DeviceID {device.DeviceID}");
+                    DeviceEvent deviceEvent = new()
+                    {
+                        DeviceId = device.DeviceId,
+                        EventType = DeviceEventType.Disconnected
+                    };
+                    AddDeviceEvent(deviceEvent);
+                    UpsertDevice(device, isActive: false);
                 }
                 else
                 {
-                    Debug.WriteLine($"There are no active connection with DeviceID {device.DeviceID}");
+                    throw new Exception($"Device with DeviceID {device.DeviceId} was already inactive");
                 }
             }
-            else
+            catch (Exception ex)
             {
-                throw new Exception("Device removed was not saved");
+                Debug.WriteLine($"ERROR in DeviceRemovedEvent: {ex.Message}");
             }
         }
 
-        private DeviceInfo? GetDeviceInfo(ManagementBaseObject obj) 
+        private string? ExtractDeviceId(ManagementBaseObject? obj)
+        {
+            if (obj == null) 
+                return null;
+
+            string? hidDeviceId = obj.GetPropertyValue("DeviceID")?.ToString();
+            if (string.IsNullOrEmpty(hidDeviceId))
+                return null;
+
+            string? vid = GetValueFromDeviceId(hidDeviceId, "VID_");
+            string? pid = GetValueFromDeviceId(hidDeviceId, "PID_");
+            if (string.IsNullOrEmpty(vid) || string.IsNullOrEmpty(pid))
+                return null;
+
+            return $"USB\\VID_{vid}&PID_{pid}";
+        }
+
+        private DeviceInfo? ExtractDeviceInfo(ManagementBaseObject? obj) 
         {
             if (obj == null) return null;
 
@@ -142,7 +181,7 @@ namespace KeyPulse.Services
 
                 return new DeviceInfo
                 {
-                    DeviceID = deviceId,
+                    DeviceId = deviceId,
                     VID = vid,
                     PID = pid,
                     DeviceName = deviceName,
@@ -150,17 +189,8 @@ namespace KeyPulse.Services
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"ManagementException in GetDeviceInfo: {ex.Message}");
+                Debug.WriteLine($"ERROR in GetDeviceInfo: {ex.Message}");
                 return null;
-            }
-        }
-
-        private void CreateNewConnectionIfNeeded(DeviceInfo device)
-        {
-            if (!_dataService.ActiveConnectionExists(device.DeviceID))
-            {
-                Connection newConnection = new() { DeviceID = device.DeviceID };
-                UpdateOrAddConnection(newConnection);
             }
         }
 
@@ -187,7 +217,7 @@ namespace KeyPulse.Services
             {
                 if (e.PropertyName == nameof(DeviceInfo.DeviceName))
                 {
-                    AddOrUpdateDevice(device);
+                    _dataService.SaveDevice(device);
                 }
             }
         }
@@ -218,7 +248,7 @@ namespace KeyPulse.Services
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"Exception in StartMonitoring: {ex.Message}");
+                Debug.WriteLine($"ERROR in StartMonitoring: {ex.Message}");
             }
         }
 
@@ -230,19 +260,31 @@ namespace KeyPulse.Services
                     SELECT * FROM Win32_PnPEntity 
                     WHERE Service = 'kbdhid' OR Service = 'mouhid'
                 ");
+
                 foreach (ManagementBaseObject obj in searcher.Get())
                 {
-                    DeviceInfo? device = GetDeviceInfo(obj);
-                    if (device != null)
+                    DeviceInfo? currDevice = ExtractDeviceInfo(obj);
+                    if (currDevice == null) 
+                        continue;
+
+                    if (_recentlyProcessedDevices.Contains(currDevice.DeviceId))
+                        continue;
+                    _recentlyProcessedDevices.Add(currDevice.DeviceId);
+
+                    DeviceEvent currDeviceEvent = new()
                     {
-                        AddOrUpdateDevice(device);
-                        CreateNewConnectionIfNeeded(device);
-                    }
+                        DeviceId = currDevice.DeviceId,
+                        EventType = DeviceEventType.ConnectionOpened
+                    };
+                    AddDeviceEvent(currDeviceEvent);
+                    UpsertDevice(currDevice, isActive: true);
                 }
+                
+                _recentlyProcessedDevices.Clear();
             }
             catch (Exception ex) 
             {
-                Debug.WriteLine($"Exception in SetCurrentDevicesFromSystem: {ex.Message}");
+                Debug.WriteLine($"ERROR in SetCurrentDevicesFromSystem: {ex.Message}");
             }
         }
 
@@ -258,13 +300,17 @@ namespace KeyPulse.Services
 
             if (disposing)
             {
-                foreach (var connection in _dataService.GetAllConnections(onlyActive: true))
+                foreach (var device in _dataService.GetAllDevices(activeOnly: true))
                 {
-                    connection.DisconnectedAt = DateTime.Now;
-                    _dataService.SaveConnection(connection);
+                    DeviceEvent newDeviceEvent = new()
+                    {
+                        DeviceId = device.DeviceId,
+                        EventType = DeviceEventType.ConnectionClosed
+                    };
+                    _dataService.AddDeviceEvent(newDeviceEvent);
                 }
 
-                foreach (var device in AllDevices)
+                foreach (var device in DeviceList)
                     device.PropertyChanged -= Device_PropertyChanged;
 
                 if (_insertWatcher != null)

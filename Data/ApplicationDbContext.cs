@@ -11,7 +11,7 @@ namespace KeyPulse.Data
     public class ApplicationDbContext : DbContext
     {
         public DbSet<DeviceInfo> Devices { get; set; }
-        public DbSet<Connection> Connections { get; set; }
+        public DbSet<DeviceEvent> DeviceEvents { get; set; }
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
@@ -23,8 +23,28 @@ namespace KeyPulse.Data
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
-            modelBuilder.Entity<DeviceInfo>().ToTable("Devices");
-            modelBuilder.Entity<Connection>().ToTable("Connections");
+            base.OnModelCreating(modelBuilder);
+
+            modelBuilder.Entity<DeviceInfo>()
+                .ToTable("Devices")
+                .HasIndex(e => e.DeviceId)
+                .HasDatabaseName("Idx_Devices_DeviceId");
+
+            modelBuilder.Entity<DeviceEvent>()
+                .ToTable("DeviceEvents");
+
+            modelBuilder.Entity<DeviceEvent>()
+                .HasIndex(e => e.Timestamp)
+                .HasDatabaseName("Idx_DeviceEvents_Timestamp");
+
+            modelBuilder.Entity<DeviceEvent>()
+                .HasIndex(e => new { e.DeviceId, e.Timestamp })
+                .HasDatabaseName("Idx_DeviceEvents_DeviceIdTimestamp");
+
+            modelBuilder.Entity<DeviceEvent>()
+                .HasIndex(e => new { e.DeviceId, e.Timestamp, e.EventType })
+                .IsUnique()
+                .HasDatabaseName("Idx_DeviceEvents_Unique");
         }
     }
 }

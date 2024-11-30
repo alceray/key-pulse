@@ -1,0 +1,19 @@
+﻿<UserControl xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    x:Class="KeyPulse.Views.EventLogView"
+                    xmlns:vm="clr-namespace:KeyPulse.ViewModels"
+                    Height="Auto" Width="Auto">
+    <Grid>
+        <DataGrid ItemsSource="{Binding EventLogCollection}"
+                  AutoGenerateColumns="False"
+                  IsReadOnly="True"
+                  CanUserSortColumns="False"
+                  CanUserReorderColumns="False">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="Device ID" Binding="{Binding DeviceId}" Width="*"/>
+                <DataGridTextColumn Header="Event Type" Binding="{Binding EventType}" Width="Auto"/>
+                <DataGridTextColumn Header="Timestamp" Binding="{Binding Timestamp, StringFormat=\{0:yyyy-MM-dd HH:mm:ss\}}" Width="Auto" />
+            </DataGrid.Columns>
+        </DataGrid>    
+    </Grid>
+</UserControl>

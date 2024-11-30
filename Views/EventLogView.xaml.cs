@@ -9,12 +9,12 @@ using System.Windows.Controls;
 
 namespace KeyPulse.Views
 {
-    public partial class ConnectionLogView : UserControl
+    public partial class EventLogView : UserControl
     {
-        public ConnectionLogView()
+        public EventLogView()
         {
             InitializeComponent();
-            DataContext = App.ServiceProvider.GetRequiredService<ConnectionLogViewModel>();
+            DataContext = App.ServiceProvider.GetRequiredService<EventLogViewModel>();
         }
     }
 }

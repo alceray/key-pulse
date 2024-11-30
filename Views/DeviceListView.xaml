@@ -12,7 +12,7 @@
                       IsChecked="{Binding ShowAllDevices, Mode=TwoWay}"
                       HorizontalAlignment="Left"
                       Margin="5"/>
-            <DataGrid ItemsSource="{Binding AllDevicesCollView}"
+            <DataGrid ItemsSource="{Binding DeviceListCollection}"
                       AutoGenerateColumns="False"
                       IsReadOnly="True"
                       Name="DevicesDataGrid"
@@ -31,7 +31,7 @@
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
                                 <TextBlock Text="✓" 
-                                           Visibility="{Binding IsConnected, Converter={StaticResource BooleanToVisibilityConverter}}"
+                                           Visibility="{Binding IsActive, Converter={StaticResource BooleanToVisibilityConverter}}"
                                            HorizontalAlignment="Center" 
                                            VerticalAlignment="Center" />
                             </DataTemplate>

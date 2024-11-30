@@ -1,4 +1,6 @@
 ﻿using KeyPulse.Helpers;
+using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
@@ -7,23 +9,22 @@ using System.Windows;
 
 namespace KeyPulse.Models
 {
+    public enum DeviceTypes
+    {
+        Unknown,
+        Keyboard,
+        Mouse,
+        Other
+    }
+
     [Table("Devices")]
     public class DeviceInfo : ObservableObject
     {
-        public enum DeviceTypes
-        {
-            Unknown,
-            Keyboard,
-            Mouse,
-            Other
-        }
-
         [Key]
-        [Required]
-        public required string DeviceID { get; set; }
+        public required string DeviceId { get; set; }
 
         [Required]
-        public DeviceTypes DeviceType { get; set; } =  DeviceTypes.Unknown;
+        public DeviceTypes DeviceType { get; set; } = DeviceTypes.Unknown;
 
         [Required]
         public required string VID { get; set; }
@@ -46,9 +47,21 @@ namespace KeyPulse.Models
         }
         private string _deviceName = "Unknown Device";
 
-        public virtual ICollection<Connection> Connections { get; } = [];
+        [Required]
+        public bool IsActive
+        {
+            get => _isActive;
+            set
+            {
+                if (_isActive != value)
+                {
+                    _isActive = value;
+                    OnPropertyChanged(nameof(IsActive));
+                }
+            }
+        }
+        private bool _isActive = true;
 
-        [NotMapped]
-        public bool IsConnected => Connections.Any(c => c.DisconnectedAt == null);
+        public virtual ObservableCollection<DeviceEvent> DeviceEventList { get; } = [];
     }
 }
