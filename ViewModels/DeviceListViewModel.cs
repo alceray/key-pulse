@@ -32,7 +32,7 @@ namespace KeyPulse.ViewModels
                 if (_showAllDevices != value)
                 {
                     _showAllDevices = value;
-                    Application.Current.Dispatcher.Invoke(() => DeviceListCollection.Refresh());
+                    Application.Current.Dispatcher.BeginInvoke(() => DeviceListCollection.Refresh());
                     OnPropertyChanged(nameof(ShowAllDevices));
                     OnPropertyChanged(nameof(DeviceNameHeader));
                 }
@@ -50,7 +50,7 @@ namespace KeyPulse.ViewModels
             foreach (var device in _usbMonitorService.DeviceList)
                 device.PropertyChanged += Device_PropertyChanged;
 
-            _usbMonitorService.DeviceList.CollectionChanged += ConnectedDevices_CollectionChanged;
+            _usbMonitorService.DeviceList.CollectionChanged += DeviceList_CollectionChanged;
 
             RenameDeviceCommand = new RelayCommand(ExecuteRenameDevice, CanExecuteRenameDevice);
         }
@@ -59,12 +59,12 @@ namespace KeyPulse.ViewModels
         {
             if (e.PropertyName == nameof(DeviceInfo.IsActive))
             {
-                Application.Current.Dispatcher.Invoke(() => DeviceListCollection.Refresh());
+                Application.Current.Dispatcher.BeginInvoke(() => DeviceListCollection.Refresh());
                 OnPropertyChanged(nameof(DeviceNameHeader));
             }
         }
 
-        private void ConnectedDevices_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+        private void DeviceList_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
         {
             if (e.NewItems != null)
             {
@@ -77,7 +77,7 @@ namespace KeyPulse.ViewModels
                     device.PropertyChanged -= Device_PropertyChanged;
             }
 
-            Application.Current.Dispatcher.Invoke(() => DeviceListCollection.Refresh());
+            Application.Current.Dispatcher.BeginInvoke(() => DeviceListCollection.Refresh());
             OnPropertyChanged(nameof(DeviceNameHeader));
         }
 
@@ -104,7 +104,7 @@ namespace KeyPulse.ViewModels
             foreach (var device in _usbMonitorService.DeviceList)
                 device.PropertyChanged -= Device_PropertyChanged;
             
-            _usbMonitorService.DeviceList.CollectionChanged -= ConnectedDevices_CollectionChanged;
+            _usbMonitorService.DeviceList.CollectionChanged -= DeviceList_CollectionChanged;
             GC.SuppressFinalize(this);
         }
     }

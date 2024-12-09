@@ -14,12 +14,22 @@ namespace KeyPulse.Helpers
         public event PropertyChangedEventHandler? PropertyChanged;
         protected void OnPropertyChanged([CallerMemberName] string? propertyName = null)
         {
+            if (Application.Current == null)
+            {
+                // If Application.Current is null, invoke directly
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+                return;
+            }
+
             if (Application.Current.Dispatcher.CheckAccess())
             {
+                // If on UI thread, invoke directly
                 PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
-            } else
+            } 
+            else
             {
-                Application.Current.Dispatcher.Invoke(() => 
+                // If not on UI thread, asynchronously invoke on UI thread
+                Application.Current.Dispatcher.BeginInvoke(() => 
                     PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName))
                 );
             }

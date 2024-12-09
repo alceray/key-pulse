@@ -8,10 +8,12 @@ using System.Threading.Tasks;
 
 namespace KeyPulse.Models
 {
-    public enum DeviceEventType
+    public enum EventTypes
     {
-        ConnectionClosed,
-        ConnectionOpened,
+        AppStarted,
+        AppEnded,
+        ConnectionStarted,
+        ConnectionEnded,
         Connected,
         Disconnected,
         Suspended,
@@ -29,12 +31,10 @@ namespace KeyPulse.Models
         public DateTime Timestamp { get; set; } = DateTime.Now;
 
         [Required]
-        public required DeviceEventType EventType { get; set; }
+        public required EventTypes EventType { get; set; }
 
+        // device id should only be empty if event type is app started/ended
         [Required]
-        public required string DeviceId { get; set; }
-
-        [ForeignKey("DeviceId")]
-        public virtual DeviceInfo Device { get; set; } = null!;
+        public string DeviceId { get; set; } = "";
     }
 }

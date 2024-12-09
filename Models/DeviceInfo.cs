@@ -61,7 +61,5 @@ namespace KeyPulse.Models
             }
         }
         private bool _isActive = true;
-
-        public virtual ObservableCollection<DeviceEvent> DeviceEventList { get; } = [];
     }
 }

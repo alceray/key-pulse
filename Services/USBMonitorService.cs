@@ -42,7 +42,7 @@ namespace KeyPulse.Services
             if (!DeviceList.Any(d => d.DeviceId == device.DeviceId))
             {
                 device.PropertyChanged += Device_PropertyChanged;
-                Application.Current.Dispatcher.Invoke(() => DeviceList.Add(device));
+                Application.Current.Dispatcher.BeginInvoke(() => DeviceList.Add(device));
             }
             device.IsActive = isActive;
             _dataService.SaveDevice(device);
@@ -50,7 +50,7 @@ namespace KeyPulse.Services
 
         private void AddDeviceEvent(DeviceEvent deviceEvent)
         {
-            Application.Current.Dispatcher.Invoke(() => DeviceEventList.Add(deviceEvent));
+            Application.Current.Dispatcher.BeginInvoke(() => DeviceEventList.Add(deviceEvent));
             _dataService.AddDeviceEvent(deviceEvent);
         }
 
@@ -58,6 +58,8 @@ namespace KeyPulse.Services
         {
             try
             {
+                var now = DateTime.Now;
+
                 ManagementBaseObject? instance = (ManagementBaseObject)e.NewEvent["TargetInstance"];
                 if (instance == null) 
                     return;
@@ -80,12 +82,12 @@ namespace KeyPulse.Services
 
                 if (!device.IsActive)
                 {
-                    DeviceEvent deviceEvent = new()
+                    AddDeviceEvent(new()
                     {
+                        Timestamp = now,
                         DeviceId = deviceId,
-                        EventType = DeviceEventType.Connected
-                    };
-                    AddDeviceEvent(deviceEvent);
+                        EventType = EventTypes.Connected
+                    });
                     UpsertDevice(device, isActive: true);
                 }
                 else
@@ -101,7 +103,7 @@ namespace KeyPulse.Services
 
         private void DeviceRemovedEvent(object sender, EventArrivedEventArgs e)
         {
-            try { 
+            try {
                 ManagementBaseObject? instance = (ManagementBaseObject)e.NewEvent["TargetInstance"];
                 if (instance == null) 
                     return;
@@ -116,12 +118,11 @@ namespace KeyPulse.Services
 
                 if (device.IsActive)
                 {
-                    DeviceEvent deviceEvent = new()
+                    AddDeviceEvent(new()
                     {
                         DeviceId = device.DeviceId,
-                        EventType = DeviceEventType.Disconnected
-                    };
-                    AddDeviceEvent(deviceEvent);
+                        EventType = EventTypes.Disconnected
+                    });
                     UpsertDevice(device, isActive: false);
                 }
                 else
@@ -256,6 +257,8 @@ namespace KeyPulse.Services
         {
             try
             {
+                AddDeviceEvent(new() { EventType = EventTypes.AppStarted });
+
                 ManagementObjectSearcher searcher = new(@"
                     SELECT * FROM Win32_PnPEntity 
                     WHERE Service = 'kbdhid' OR Service = 'mouhid'
@@ -271,12 +274,11 @@ namespace KeyPulse.Services
                         continue;
                     _recentlyProcessedDevices.Add(currDevice.DeviceId);
 
-                    DeviceEvent currDeviceEvent = new()
+                    AddDeviceEvent(new()
                     {
                         DeviceId = currDevice.DeviceId,
-                        EventType = DeviceEventType.ConnectionOpened
-                    };
-                    AddDeviceEvent(currDeviceEvent);
+                        EventType = EventTypes.ConnectionStarted
+                    });
                     UpsertDevice(currDevice, isActive: true);
                 }
                 
@@ -302,13 +304,15 @@ namespace KeyPulse.Services
             {
                 foreach (var device in _dataService.GetAllDevices(activeOnly: true))
                 {
-                    DeviceEvent newDeviceEvent = new()
+                    AddDeviceEvent(new()
                     {
                         DeviceId = device.DeviceId,
-                        EventType = DeviceEventType.ConnectionClosed
-                    };
-                    _dataService.AddDeviceEvent(newDeviceEvent);
+                        EventType = EventTypes.ConnectionEnded
+                    });
+                    UpsertDevice(device, isActive: false);
                 }
+
+                AddDeviceEvent(new() { EventType = EventTypes.AppEnded });
 
                 foreach (var device in DeviceList)
                     device.PropertyChanged -= Device_PropertyChanged;

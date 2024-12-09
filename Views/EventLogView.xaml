@@ -10,9 +10,9 @@
                   CanUserSortColumns="False"
                   CanUserReorderColumns="False">
             <DataGrid.Columns>
-                <DataGridTextColumn Header="Device ID" Binding="{Binding DeviceId}" Width="*"/>
-                <DataGridTextColumn Header="Event Type" Binding="{Binding EventType}" Width="Auto"/>
                 <DataGridTextColumn Header="Timestamp" Binding="{Binding Timestamp, StringFormat=\{0:yyyy-MM-dd HH:mm:ss\}}" Width="Auto" />
+                <DataGridTextColumn Header="Event Type" Binding="{Binding EventType}" Width="Auto"/>
+                <DataGridTextColumn Header="Device ID" Binding="{Binding DeviceId}" Width="*"/>
             </DataGrid.Columns>
         </DataGrid>    
     </Grid>
