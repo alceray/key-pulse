@@ -32,9 +32,12 @@ namespace KeyPulse.ViewModels
                 if (_showAllDevices != value)
                 {
                     _showAllDevices = value;
-                    Application.Current.Dispatcher.BeginInvoke(() => DeviceListCollection.Refresh());
+                    Application.Current.Dispatcher.BeginInvoke(() => 
+                    {
+                        DeviceListCollection.Refresh();
+                       OnPropertyChanged(nameof(DeviceNameHeader));
+                    });
                     OnPropertyChanged(nameof(ShowAllDevices));
-                    OnPropertyChanged(nameof(DeviceNameHeader));
                 }
             }
         }
@@ -59,8 +62,11 @@ namespace KeyPulse.ViewModels
         {
             if (e.PropertyName == nameof(DeviceInfo.IsActive))
             {
-                Application.Current.Dispatcher.BeginInvoke(() => DeviceListCollection.Refresh());
-                OnPropertyChanged(nameof(DeviceNameHeader));
+                Application.Current.Dispatcher.BeginInvoke(() =>
+                {
+                    DeviceListCollection.Refresh();
+                    OnPropertyChanged(nameof(DeviceNameHeader));
+                });
             }
         }
 
@@ -77,8 +83,11 @@ namespace KeyPulse.ViewModels
                     device.PropertyChanged -= Device_PropertyChanged;
             }
 
-            Application.Current.Dispatcher.BeginInvoke(() => DeviceListCollection.Refresh());
-            OnPropertyChanged(nameof(DeviceNameHeader));
+            Application.Current.Dispatcher.BeginInvoke(() =>
+            {
+                DeviceListCollection.Refresh();
+                OnPropertyChanged(nameof(DeviceNameHeader));
+            });
         }
 
         private void ExecuteRenameDevice(object parameter)

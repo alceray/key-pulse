@@ -27,12 +27,6 @@ namespace KeyPulse.Models
         public DeviceTypes DeviceType { get; set; } = DeviceTypes.Unknown;
 
         [Required]
-        public required string VID { get; set; }
-
-        [Required]
-        public required string PID { get; set; }
-
-        [Required]
         public string DeviceName 
         {
             get => _deviceName;

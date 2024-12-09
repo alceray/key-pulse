@@ -45,11 +45,9 @@ namespace KeyPulse.Services
             return _context.Devices.Find(deviceId);
         }
 
-        public IReadOnlyCollection<DeviceInfo> GetAllDevices(bool activeOnly = false)
+        public IReadOnlyCollection<DeviceInfo> GetAllDevices()
         {
-            return activeOnly
-                ? _context.Devices.Where(d => d.IsActive).ToList().AsReadOnly()
-                : _context.Devices.ToList().AsReadOnly();
+            return _context.Devices.ToList().AsReadOnly();
         }
 
         public void SaveDevice(DeviceInfo device)

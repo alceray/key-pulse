@@ -20,13 +20,12 @@
                       CanUserResizeColumns="False"
                       CanUserResizeRows="False">
                 <DataGrid.Columns>
+                    <DataGridTextColumn Header="Device ID" Binding="{Binding DeviceId}" Width="Auto"/>
                     <DataGridTextColumn Binding="{Binding DeviceName}" Width="*">
                         <DataGridTextColumn.Header>
                             <TextBlock Text="{Binding DataContext.DeviceNameHeader, ElementName=DevicesDataGrid}"/>
                         </DataGridTextColumn.Header>
                     </DataGridTextColumn>
-                    <DataGridTextColumn Header="VID" Binding="{Binding VID}" Width="Auto"/>
-                    <DataGridTextColumn Header="PID" Binding="{Binding PID}" Width="Auto"/>
                     <DataGridTemplateColumn Header="Connected" Width="Auto">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>

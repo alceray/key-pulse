@@ -25,7 +25,7 @@ namespace KeyPulse.Services
         public USBMonitorService(DataService dataService) 
         {
             _dataService = dataService;
-            DeviceList = new(_dataService.GetAllDevices());
+            DeviceList = GetAllDevices();
             DeviceEventList = new(_dataService.GetAllDeviceEvents());
 
             if (_dataService.IsAnyDeviceActive())
@@ -37,6 +37,16 @@ namespace KeyPulse.Services
             StartMonitoring();
         }
                 
+        private ObservableCollection<DeviceInfo> GetAllDevices()
+        {
+            var devices = _dataService.GetAllDevices();
+            foreach (var device in devices)
+            {
+                device.PropertyChanged += Device_PropertyChanged;
+            }
+            return new(devices);
+        }
+
         private void UpsertDevice(DeviceInfo device, bool isActive)
         {
             if (!DeviceList.Any(d => d.DeviceId == device.DeviceId))
@@ -138,37 +148,22 @@ namespace KeyPulse.Services
 
         private string? ExtractDeviceId(ManagementBaseObject? obj)
         {
-            if (obj == null) 
-                return null;
+            if (obj == null) return null;
 
             string? hidDeviceId = obj.GetPropertyValue("DeviceID")?.ToString();
-            if (string.IsNullOrEmpty(hidDeviceId))
-                return null;
+            if (string.IsNullOrEmpty(hidDeviceId)) return null;
 
-            string? vid = GetValueFromDeviceId(hidDeviceId, "VID_");
-            string? pid = GetValueFromDeviceId(hidDeviceId, "PID_");
-            if (string.IsNullOrEmpty(vid) || string.IsNullOrEmpty(pid))
-                return null;
+            string? vid = ExtractValueFromDeviceId(hidDeviceId, "VID_");
+            string? pid = ExtractValueFromDeviceId(hidDeviceId, "PID_");
+            if (string.IsNullOrEmpty(vid) || string.IsNullOrEmpty(pid)) return null;
 
             return $"USB\\VID_{vid}&PID_{pid}";
         }
 
         private DeviceInfo? ExtractDeviceInfo(ManagementBaseObject? obj) 
         {
-            if (obj == null) return null;
-
             try
             {
-                string? hidDeviceId = obj.GetPropertyValue("DeviceID")?.ToString();
-                if (string.IsNullOrEmpty(hidDeviceId)) return null;
-
-                string? vid = GetValueFromDeviceId(hidDeviceId, "VID_");
-                string? pid = GetValueFromDeviceId(hidDeviceId, "PID_");
-                if (string.IsNullOrEmpty(vid) || string.IsNullOrEmpty(pid)) return null;
-
-                string deviceName = obj.GetPropertyValue("Name")?.ToString() ?? _unknownDeviceName;
-                string deviceId = $"USB\\VID_{vid}&PID_{pid}";
-
                 //Console.WriteLine($"Properties of {deviceName}:");
                 //foreach (var property in obj.Properties)
                 //{
@@ -180,11 +175,15 @@ namespace KeyPulse.Services
                 //    }
                 //}
 
+                string deviceName = obj?.GetPropertyValue("Name")?.ToString() ?? _unknownDeviceName;
+                string? deviceId = ExtractDeviceId(obj);
+                if (deviceId == null) return null;
+                if (DeviceList.Any(d => d.DeviceId == deviceId))
+                    return DeviceList.First(d => d.DeviceId == deviceId);
+
                 return new DeviceInfo
                 {
                     DeviceId = deviceId,
-                    VID = vid,
-                    PID = pid,
                     DeviceName = deviceName,
                 };
             }
@@ -195,7 +194,7 @@ namespace KeyPulse.Services
             }
         }
 
-        private static string GetValueFromDeviceId(string? deviceId, string identifier)
+        private static string ExtractValueFromDeviceId(string? deviceId, string identifier)
         {
             if (string.IsNullOrEmpty(deviceId) || string.IsNullOrEmpty(identifier))
                 return "";
@@ -302,20 +301,22 @@ namespace KeyPulse.Services
 
             if (disposing)
             {
-                foreach (var device in _dataService.GetAllDevices(activeOnly: true))
+
+                foreach (var device in DeviceList)
                 {
-                    AddDeviceEvent(new()
+                    if (device.IsActive)
                     {
-                        DeviceId = device.DeviceId,
-                        EventType = EventTypes.ConnectionEnded
-                    });
-                    UpsertDevice(device, isActive: false);
+                        AddDeviceEvent(new()
+                        {
+                            DeviceId = device.DeviceId,
+                            EventType = EventTypes.ConnectionEnded
+                        });
+                        UpsertDevice(device, isActive: false);
+                    }
+                    device.PropertyChanged -= Device_PropertyChanged;
                 }
 
                 AddDeviceEvent(new() { EventType = EventTypes.AppEnded });
-
-                foreach (var device in DeviceList)
-                    device.PropertyChanged -= Device_PropertyChanged;
 
                 if (_insertWatcher != null)
                 {
