@@ -9,8 +9,8 @@
         Title="KeyPulse" Height="600" Width="800">
     <Grid>
         <TabControl>
-            <TabItem Header="Devices">
-                <views:DeviceListView />
+            <TabItem Header="{Binding DataContext.DeviceTitleWithCount, ElementName=DeviceListViewControl}">
+                <views:DeviceListView x:Name="DeviceListViewControl" />
             </TabItem>
             <TabItem Header="Event Log">
                 <views:EventLogView />

@@ -20,9 +20,8 @@ namespace KeyPulse.ViewModels
     {
         private readonly USBMonitorService _usbMonitorService;
         public ICollectionView DeviceListCollection { get; }
-
         public ICommand RenameDeviceCommand { get; }
-        public string DeviceNameHeader => $"Devices ({DeviceListCollection.Cast<object>().Count()})";
+        public string DeviceTitleWithCount => $"Devices ({DeviceListCollection.Cast<object>().Count()})";
 
         public bool ShowAllDevices
         {
@@ -35,7 +34,7 @@ namespace KeyPulse.ViewModels
                     Application.Current.Dispatcher.BeginInvoke(() => 
                     {
                         DeviceListCollection.Refresh();
-                       OnPropertyChanged(nameof(DeviceNameHeader));
+                       OnPropertyChanged(nameof(DeviceTitleWithCount));
                     });
                     OnPropertyChanged(nameof(ShowAllDevices));
                 }
@@ -65,7 +64,7 @@ namespace KeyPulse.ViewModels
                 Application.Current.Dispatcher.BeginInvoke(() =>
                 {
                     DeviceListCollection.Refresh();
-                    OnPropertyChanged(nameof(DeviceNameHeader));
+                    OnPropertyChanged(nameof(DeviceTitleWithCount));
                 });
             }
         }
@@ -86,7 +85,7 @@ namespace KeyPulse.ViewModels
             Application.Current.Dispatcher.BeginInvoke(() =>
             {
                 DeviceListCollection.Refresh();
-                OnPropertyChanged(nameof(DeviceNameHeader));
+                OnPropertyChanged(nameof(DeviceTitleWithCount));
             });
         }
 
