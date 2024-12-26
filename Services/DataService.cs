@@ -96,5 +96,30 @@ namespace KeyPulse.Services
                 Debug.WriteLine($"ERROR in AddDeviceEvent: {ex.Message}");
             }
         }
+
+        public TimeSpan GetTotalUsage(string deviceId)
+        {
+            TimeSpan totalUsage = TimeSpan.Zero;
+            DateTime? lastStartTime = null;
+            var events = _context.DeviceEvents
+                .Where(e => e.DeviceId == deviceId)
+                .OrderBy(e => e.Timestamp)
+                .ToList();
+            
+            foreach (var deviceEvent in events)
+            {
+                if (deviceEvent.EventType.IsOpening())
+                {
+                    lastStartTime = deviceEvent.Timestamp;
+                }
+                else if (deviceEvent.EventType.IsClosing() && lastStartTime.HasValue)
+                {
+                    totalUsage += deviceEvent.Timestamp - lastStartTime.Value;
+                    lastStartTime = null;
+                }
+            }
+
+            return totalUsage;
+        }
     }
 }

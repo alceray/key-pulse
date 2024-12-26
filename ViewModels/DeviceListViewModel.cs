@@ -7,18 +7,22 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Data;
 using System.Windows.Input;
+using System.Windows.Threading;
 
 namespace KeyPulse.ViewModels
 {
     public class DeviceListViewModel : ObservableObject, IDisposable
     {
         private readonly USBMonitorService _usbMonitorService;
+        private readonly DispatcherTimer _timer;
+
         public ICollectionView DeviceListCollection { get; }
         public ICommand RenameDeviceCommand { get; }
         public string DeviceTitleWithCount => $"Devices ({DeviceListCollection.Cast<object>().Count()})";
@@ -34,7 +38,7 @@ namespace KeyPulse.ViewModels
                     Application.Current.Dispatcher.BeginInvoke(() => 
                     {
                         DeviceListCollection.Refresh();
-                       OnPropertyChanged(nameof(DeviceTitleWithCount));
+                        OnPropertyChanged(nameof(DeviceTitleWithCount));
                     });
                     OnPropertyChanged(nameof(ShowAllDevices));
                 }
@@ -55,6 +59,19 @@ namespace KeyPulse.ViewModels
             _usbMonitorService.DeviceList.CollectionChanged += DeviceList_CollectionChanged;
 
             RenameDeviceCommand = new RelayCommand(ExecuteRenameDevice, CanExecuteRenameDevice);
+
+            _timer = new DispatcherTimer
+            {
+                Interval = TimeSpan.FromSeconds(1)
+            };
+            _timer.Tick += (s, e) =>
+            {
+                foreach (var device in _usbMonitorService.DeviceList)
+                {
+                    Application.Current.Dispatcher.BeginInvoke(() => device.UpdateCurrentSessionUsage());
+                }
+            };
+            _timer.Start();
         }
 
         private void Device_PropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -113,6 +130,7 @@ namespace KeyPulse.ViewModels
                 device.PropertyChanged -= Device_PropertyChanged;
             
             _usbMonitorService.DeviceList.CollectionChanged -= DeviceList_CollectionChanged;
+            _timer.Stop();
             GC.SuppressFinalize(this);
         }
     }

@@ -21,6 +21,20 @@ namespace KeyPulse.Models
         Error
     }
 
+    public static class EventTypeExtensions
+    {
+        private static readonly List<EventTypes> _openingEvents = [EventTypes.ConnectionStarted, EventTypes.Connected, EventTypes.Resumed];
+        private static readonly List<EventTypes> _closingEvents = [EventTypes.ConnectionEnded, EventTypes.Disconnected, EventTypes.Suspended];
+        public static bool IsOpening(this EventTypes eventType)
+        {
+            return _openingEvents.Contains(eventType);
+        }
+        public static bool IsClosing(this EventTypes eventType)
+        {
+            return _closingEvents.Contains(eventType);
+        }
+    }
+
     [Table("DeviceEvents")]
     public class DeviceEvent
     {

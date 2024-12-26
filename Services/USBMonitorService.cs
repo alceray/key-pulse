@@ -28,10 +28,11 @@ namespace KeyPulse.Services
             DeviceList = GetAllDevices();
             DeviceEventList = new(_dataService.GetAllDeviceEvents());
 
-            if (_dataService.IsAnyDeviceActive())
-            {
-                throw new InvalidOperationException("Cannot initialize usb monitor service with active devices");
-            }
+            // TODO: Handle app/system crashes before uncommenting
+            //if (_dataService.IsAnyDeviceActive())
+            //{
+            //    throw new InvalidOperationException("Cannot initialize usb monitor service with active devices");
+            //}
 
             SetCurrentDevicesFromSystem();
             StartMonitoring();
@@ -55,6 +56,8 @@ namespace KeyPulse.Services
                 Application.Current.Dispatcher.BeginInvoke(() => DeviceList.Add(device));
             }
             device.IsActive = isActive;
+            if (!isActive)
+                device.TotalUsage = _dataService.GetTotalUsage(device.DeviceId);
             _dataService.SaveDevice(device);
         }
 
