@@ -43,7 +43,7 @@ namespace KeyPulse.Services
             StartMonitoring();
         }
                 
-        private void printObj(ManagementBaseObject obj)
+        private static void PrintObject(ManagementBaseObject obj)
         {
             if (obj == null)
                 return;
@@ -185,7 +185,7 @@ namespace KeyPulse.Services
             }
         }
 
-        private string? ExtractDeviceId(ManagementBaseObject? obj)
+        private static string? ExtractDeviceId(ManagementBaseObject? obj)
         {
             if (obj == null) return null;
 
