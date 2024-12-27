@@ -1,6 +1,8 @@
 ﻿using KeyPulse.Data;
 using KeyPulse.Models;
+using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Management;
 using System.Net.NetworkInformation;
@@ -18,7 +20,9 @@ namespace KeyPulse.Services
         public ObservableCollection<DeviceEvent> DeviceEventList;
        
         private readonly DataService _dataService;
-        private readonly HashSet<string> _recentlyProcessedDevices = [];
+        // for every irl connection, 2-3 insert events are created within a very short timeframe, so this cache of
+        // recently inserted devices helps to prevent inserting duplicate connected events in the db.
+        private readonly ConcurrentDictionary<string, (int KeyboardCount, int MouseCount, DateTime FirstTimestamp)> _recentlyInsertedDevices = new();
         private readonly string _unknownDeviceName = "Unknown Device";
         private bool _disposed = false;
 
@@ -38,6 +42,23 @@ namespace KeyPulse.Services
             StartMonitoring();
         }
                 
+        private void printObj(ManagementBaseObject obj)
+        {
+            if (obj == null)
+                return;
+
+            Debug.WriteLine("OBJECT PROPERTIES");
+            foreach (var property in obj.Properties)
+            {
+                string name = property.Name;
+                object value = property.Value;
+                if (!string.IsNullOrEmpty(name) && !string.IsNullOrEmpty(value?.ToString()))
+                {
+                    Debug.WriteLine($"{name}: {value}");
+                }
+            }
+        }
+
         private ObservableCollection<DeviceInfo> GetAllDevices()
         {
             var devices = _dataService.GetAllDevices();
@@ -53,7 +74,7 @@ namespace KeyPulse.Services
             if (!DeviceList.Any(d => d.DeviceId == device.DeviceId))
             {
                 device.PropertyChanged += Device_PropertyChanged;
-                Application.Current.Dispatcher.BeginInvoke(() => DeviceList.Add(device));
+                Application.Current.Dispatcher.Invoke(() => DeviceList.Add(device));
             }
             device.IsActive = isActive;
             if (!isActive)
@@ -71,41 +92,61 @@ namespace KeyPulse.Services
         {
             try
             {
-                var now = DateTime.Now;
-
                 ManagementBaseObject? instance = (ManagementBaseObject)e.NewEvent["TargetInstance"];
                 if (instance == null) 
                     return;
+
+                //printObj(instance);
 
                 string? deviceId = ExtractDeviceId(instance);
                 if (string.IsNullOrEmpty(deviceId)) 
                     return;
 
-                // for every actual connection, 3 insert events are triggered within a very short timeframe, so this cache of
-                // recently processed devices helps to prevent inserting duplicate events in the db. this is merely a workaround
-                // and more work will be necessary for a foolproof solution. the delay was arbitrarily set to 0.2 seconds.
-                if (_recentlyProcessedDevices.Contains(deviceId)) 
-                    return;
-                _recentlyProcessedDevices.Add(deviceId);
-                Task.Delay(200).ContinueWith(_ => _recentlyProcessedDevices.Remove(deviceId));
+                int keyboardIncrement = instance.GetPropertyValue("PNPClass")?.ToString() == "Keyboard" ? 1 : 0;
+                int mouseIncrement = instance.GetPropertyValue("PNPClass")?.ToString() == "Mouse" ? 1 : 0;
 
-                DeviceInfo? device = _dataService.GetDevice(deviceId);
-                if (device == null) 
-                    return;
-
-                if (!device.IsActive)
+                if (_recentlyInsertedDevices.TryGetValue(deviceId, out var value))
                 {
-                    AddDeviceEvent(new()
+                    var (keyboardCount, mouseCount, firstTimestamp) = value;
+                    keyboardCount += keyboardIncrement;
+                    mouseCount += mouseIncrement;
+                    _recentlyInsertedDevices[deviceId] = (keyboardCount, mouseCount, firstTimestamp);
+
+                    // wait until we have at least 2 events to determine the device type and save the device to db
+                    if (keyboardCount + mouseCount < 2)
+                        return;
+
+                    //Debug.WriteLine($"Inserted device {deviceId}: {keyboardCount} {mouseCount}");
+
+                    var deviceType = keyboardCount > mouseCount ? DeviceTypes.Keyboard : DeviceTypes.Mouse;
+                    DeviceInfo? device = _dataService.GetDevice(deviceId);
+                    if (device == null)
                     {
-                        Timestamp = now,
-                        DeviceId = deviceId,
-                        EventType = EventTypes.Connected
-                    });
+                        var deviceName = instance.GetPropertyValue("Name")?.ToString() ?? _unknownDeviceName;
+                        device = new DeviceInfo
+                        {
+                            DeviceId = deviceId,
+                            DeviceType = deviceType,
+                            DeviceName = deviceName,
+                        };
+                    }
+                    else
+                        device.DeviceType = deviceType;
+
+                    if (!device.IsActive)
+                    {
+                        AddDeviceEvent(new()
+                        {
+                            Timestamp = firstTimestamp,
+                            DeviceId = deviceId,
+                            EventType = EventTypes.Connected
+                        });
+                    }
                     UpsertDevice(device, isActive: true);
                 }
                 else
                 {
-                    throw new Exception($"Device with DeviceID {device.DeviceId} was already active");
+                    _recentlyInsertedDevices[deviceId] = (keyboardIncrement, mouseIncrement, DateTime.Now);
                 }
             }
             catch (Exception ex)
@@ -124,11 +165,9 @@ namespace KeyPulse.Services
                 string? deviceId = ExtractDeviceId(instance);
                 if (string.IsNullOrEmpty(deviceId))
                     return;
+                _recentlyInsertedDevices.TryRemove(deviceId, out _);
 
-                DeviceInfo? device = _dataService.GetDevice(deviceId);
-                if (device == null)
-                    return;
-
+                DeviceInfo? device = _dataService.GetDevice(deviceId) ?? throw new Exception($"Removed device does not exist");
                 if (device.IsActive)
                 {
                     AddDeviceEvent(new()
@@ -137,10 +176,6 @@ namespace KeyPulse.Services
                         EventType = EventTypes.Disconnected
                     });
                     UpsertDevice(device, isActive: false);
-                }
-                else
-                {
-                    throw new Exception($"Device with DeviceID {device.DeviceId} was already inactive");
                 }
             }
             catch (Exception ex)
@@ -161,40 +196,6 @@ namespace KeyPulse.Services
             if (string.IsNullOrEmpty(vid) || string.IsNullOrEmpty(pid)) return null;
 
             return $"USB\\VID_{vid}&PID_{pid}";
-        }
-
-        private DeviceInfo? ExtractDeviceInfo(ManagementBaseObject? obj) 
-        {
-            try
-            {
-                //Console.WriteLine($"Properties of {deviceName}:");
-                //foreach (var property in obj.Properties)
-                //{
-                //    string name = property.Name;
-                //    object value = property.Value;
-                //    if (!string.IsNullOrEmpty(name) && !string.IsNullOrEmpty(value?.ToString()))
-                //    {
-                //        Console.WriteLine($"{name}: {value}");
-                //    }
-                //}
-
-                string deviceName = obj?.GetPropertyValue("Name")?.ToString() ?? _unknownDeviceName;
-                string? deviceId = ExtractDeviceId(obj);
-                if (deviceId == null) return null;
-                if (DeviceList.Any(d => d.DeviceId == deviceId))
-                    return DeviceList.First(d => d.DeviceId == deviceId);
-
-                return new DeviceInfo
-                {
-                    DeviceId = deviceId,
-                    DeviceName = deviceName,
-                };
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"ERROR in GetDeviceInfo: {ex.Message}");
-                return null;
-            }
         }
 
         private static string ExtractValueFromDeviceId(string? deviceId, string identifier)
@@ -261,6 +262,7 @@ namespace KeyPulse.Services
             {
                 AddDeviceEvent(new() { EventType = EventTypes.AppStarted });
 
+                var devicesById = new Dictionary<string, List<ManagementBaseObject>>();
                 ManagementObjectSearcher searcher = new(@"
                     SELECT * FROM Win32_PnPEntity 
                     WHERE Service = 'kbdhid' OR Service = 'mouhid'
@@ -268,14 +270,44 @@ namespace KeyPulse.Services
 
                 foreach (ManagementBaseObject obj in searcher.Get())
                 {
-                    DeviceInfo? currDevice = ExtractDeviceInfo(obj);
-                    if (currDevice == null) 
+                    string? deviceId = ExtractDeviceId(obj);
+                    if (string.IsNullOrEmpty(deviceId))
                         continue;
+                    if (!devicesById.ContainsKey(deviceId))
+                        devicesById[deviceId] = [];
+                    devicesById[deviceId].Add(obj);
+                }
 
-                    if (_recentlyProcessedDevices.Contains(currDevice.DeviceId))
-                        continue;
-                    _recentlyProcessedDevices.Add(currDevice.DeviceId);
+                foreach (var kvp in devicesById)
+                {
+                    var deviceId = kvp.Key;
+                    var objects = kvp.Value;
+                    var keyboardCount = objects.Count(obj => obj.GetPropertyValue("PNPClass")?.ToString() == "Keyboard");
+                    var mouseCount = objects.Count(obj => obj.GetPropertyValue("PNPClass")?.ToString() == "Mouse");
+                    var deviceType = keyboardCount > mouseCount ? DeviceTypes.Keyboard : DeviceTypes.Mouse;
 
+                    //Debug.WriteLine($"Counts: {deviceId} {keyboardCount} {mouseCount}");
+
+                    DeviceInfo? currDevice = null;
+                    if (DeviceList.Any(d => d.DeviceId == deviceId))
+                    {
+                        currDevice = DeviceList.First(d => d.DeviceId == deviceId);
+                        if (currDevice.DeviceType == DeviceTypes.Unknown)
+                        {
+                            currDevice.DeviceType = deviceType;
+                        }
+                    }
+                    else
+                    {
+                        var deviceName = objects.FirstOrDefault()?.GetPropertyValue("Name")?.ToString() ?? _unknownDeviceName;
+                        currDevice = new DeviceInfo 
+                        { 
+                            DeviceId = deviceId,
+                            DeviceName = deviceName,
+                            DeviceType = deviceType,
+                        };
+                    }
+                    
                     AddDeviceEvent(new()
                     {
                         DeviceId = currDevice.DeviceId,
@@ -283,8 +315,6 @@ namespace KeyPulse.Services
                     });
                     UpsertDevice(currDevice, isActive: true);
                 }
-                
-                _recentlyProcessedDevices.Clear();
             }
             catch (Exception ex) 
             {

@@ -22,6 +22,7 @@
                       CanUserResizeRows="False">
                 <DataGrid.Columns>
                     <DataGridTextColumn Header="Device ID" Binding="{Binding DeviceId}" Width="Auto"/>
+                    <DataGridTextColumn Header="Device Type" Binding="{Binding DeviceType}" Width="Auto"/>
                     <DataGridTextColumn Header="Device Name" Binding="{Binding DeviceName}" Width="*"/>
                     <DataGridTextColumn Header="Current Session" Binding="{Binding CurrentSessionUsage, Converter={StaticResource TimeSpanToStringConverter}}" Width="Auto"/>
                     <DataGridTextColumn Header="Total Usage" Binding="{Binding TotalUsage, Converter={StaticResource TimeSpanToStringConverter}}" MinWidth="80" Width="Auto"/>

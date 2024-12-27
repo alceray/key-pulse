@@ -21,7 +21,7 @@ namespace KeyPulse.Models
     [Table("Devices")]
     public class DeviceInfo : ObservableObject
     {
-        private bool _isActive = true;
+        private bool _isActive = false;
         private string _deviceName = "Unknown Device";
         private readonly Stopwatch _currentSessionTimer = new();
         private TimeSpan _totalUsage = TimeSpan.Zero;
@@ -56,14 +56,14 @@ namespace KeyPulse.Models
                 {
                     _isActive = value;
                     OnPropertyChanged(nameof(IsActive));
-                }
-                if (_isActive)
-                {
-                    _currentSessionTimer.Restart();
-                }
-                else
-                {
-                    _currentSessionTimer.Reset();
+                    if (_isActive)
+                    {
+                        _currentSessionTimer.Restart();
+                    }
+                    else
+                    {
+                        _currentSessionTimer.Reset();
+                    }
                 }
             }
         }
