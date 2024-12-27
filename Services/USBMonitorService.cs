@@ -1,4 +1,5 @@
 ﻿using KeyPulse.Data;
+using KeyPulse.Helpers;
 using KeyPulse.Models;
 using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
@@ -122,7 +123,7 @@ namespace KeyPulse.Services
                     DeviceInfo? device = _dataService.GetDevice(deviceId);
                     if (device == null)
                     {
-                        var deviceName = instance.GetPropertyValue("Name")?.ToString() ?? _unknownDeviceName;
+                        var deviceName = PowershellScripts.GetDeviceName(deviceId) ?? _unknownDeviceName;
                         device = new DeviceInfo
                         {
                             DeviceId = deviceId,
@@ -226,7 +227,7 @@ namespace KeyPulse.Services
             }
         }
 
-        public void StartMonitoring()
+        private void StartMonitoring()
         {
             if (_disposed) return;
 
@@ -256,7 +257,7 @@ namespace KeyPulse.Services
             }
         }
 
-        public void SetCurrentDevicesFromSystem()
+        private void SetCurrentDevicesFromSystem()
         {
             try
             {
@@ -299,7 +300,7 @@ namespace KeyPulse.Services
                     }
                     else
                     {
-                        var deviceName = objects.FirstOrDefault()?.GetPropertyValue("Name")?.ToString() ?? _unknownDeviceName;
+                        var deviceName = PowershellScripts.GetDeviceName(deviceId) ?? _unknownDeviceName;
                         currDevice = new DeviceInfo 
                         { 
                             DeviceId = deviceId,
