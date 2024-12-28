@@ -5,25 +5,33 @@ using Microsoft.Extensions.DependencyInjection;
 using System.Diagnostics;
 using System.Windows;
 using System.Reflection;
+using System.Configuration;
+using System.Windows.Forms;
+using System.Drawing;
+using System.ComponentModel;
+using System.IO;
 
 namespace KeyPulse
 {
     /// <summary>
     /// Interaction logic for App.xaml
     /// </summary>
-    public partial class App : Application
+    public partial class App : System.Windows.Application
     {
         private USBMonitorService?  _usbMonitorService;
         private static Mutex? _appMutex;
+        private NotifyIcon? _trayIcon;
+        private string? _appName;
+        public static bool runInBackground { get; private set; }
         public static ServiceProvider ServiceProvider { get; private set; } = null!;
 
         protected override void OnStartup(StartupEventArgs e)
         {
-            var appName = Assembly.GetExecutingAssembly().GetName().Name ?? "KeyPulse";
-            _appMutex = new Mutex(true, appName, out bool canCreateApp);
+            _appName = Assembly.GetExecutingAssembly().GetName().Name ?? "KeyPulse";
+            _appMutex = new Mutex(true, _appName, out bool canCreateApp);
             if (!canCreateApp)
             {
-                MessageBox.Show("The application is already running.", appName, MessageBoxButton.OK, MessageBoxImage.Information);
+                System.Windows.MessageBox.Show("The application is already running.", _appName, MessageBoxButton.OK, MessageBoxImage.Information);
                 Environment.Exit(0);
             }
 
@@ -32,7 +40,39 @@ namespace KeyPulse
             ServiceProvider = services.BuildServiceProvider();
             _usbMonitorService = ServiceProvider.GetRequiredService<USBMonitorService>();
 
+            runInBackground = bool.TryParse(ConfigurationManager.AppSettings["runInBackground"], out bool result) && result;
+            if (runInBackground)
+            {
+                InitializeTrayIcon();
+            }
+            else
+            {
+                MainWindow = new MainWindow();
+                MainWindow.Closing += MainWindow_Closing;
+                MainWindow.Show();
+            }
+
             base.OnStartup(e);
+        }
+
+        protected override void OnExit(ExitEventArgs e)
+        {
+            try
+            {
+                _appMutex?.ReleaseMutex();
+                _appMutex?.Dispose();
+                _trayIcon?.Dispose();
+                _usbMonitorService?.Dispose();
+                ServiceProvider?.Dispose();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error during application shutdown: {ex.Message}");
+            }
+            finally
+            {
+                base.OnExit(e);
+            }
         }
 
         private static void ConfigureServices(IServiceCollection services)
@@ -44,22 +84,47 @@ namespace KeyPulse
             services.AddTransient<EventLogViewModel>();
         }
 
-        protected override void OnExit(ExitEventArgs e)
+        private void InitializeTrayIcon()
         {
-            try
+            _trayIcon = new NotifyIcon
             {
-                _appMutex?.ReleaseMutex();
-                _appMutex?.Dispose();
-                _usbMonitorService?.Dispose();
-                ServiceProvider?.Dispose();
+                Icon = new Icon(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Assets", "keyboard_mouse_icon.ico")),
+                Visible = true,
+                Text = _appName,
+                ContextMenuStrip = new ContextMenuStrip()
+            };
+            _trayIcon.ContextMenuStrip.Items.Add("Open", null, (s, args) => ShowMainWindow());
+            _trayIcon.ContextMenuStrip.Items.Add("Exit", null, (s, args) => Shutdown());
+            _trayIcon.MouseClick += (s, args) =>
+            {
+                if (args.Button == MouseButtons.Left)
+                {
+                    ShowMainWindow();
+                }
+            };
+        }
+
+        private void ShowMainWindow()
+        {
+            if (MainWindow == null)
+            {
+                MainWindow = new MainWindow();
+                MainWindow.Closing += MainWindow_Closing;
             }
-            catch (Exception ex) 
+            if (!MainWindow.IsVisible)
             {
-                Debug.WriteLine($"Error during application shutdown: {ex.Message}");
+                MainWindow.Show();
+                MainWindow.WindowState = WindowState.Normal;
             }
-            finally
+            var activated = MainWindow.Activate();
+        }
+
+        private void MainWindow_Closing(object? sender, CancelEventArgs e)
+        {
+            if (runInBackground)
             {
-                base.OnExit(e);
+                e.Cancel = true;
+                MainWindow.Hide();
             }
         }
     }
