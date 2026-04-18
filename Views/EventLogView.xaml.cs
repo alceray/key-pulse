@@ -1,20 +1,14 @@
-﻿using KeyPulse.ViewModels;
+﻿using System.Windows.Controls;
+using KeyPulse.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using System.Windows.Controls;
 
-namespace KeyPulse.Views
+namespace KeyPulse.Views;
+
+public partial class EventLogView : UserControl
 {
-    public partial class EventLogView : UserControl
+    public EventLogView()
     {
-        public EventLogView()
-        {
-            InitializeComponent();
-            DataContext = App.ServiceProvider.GetRequiredService<EventLogViewModel>();
-        }
+        InitializeComponent();
+        DataContext = App.ServiceProvider.GetRequiredService<EventLogViewModel>();
     }
 }
