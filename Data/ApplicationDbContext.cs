@@ -1,5 +1,6 @@
-﻿using KeyPulse.Models;
-using KeyPulse.Services;
+﻿using System.IO;
+using System.Reflection;
+using KeyPulse.Models;
 using Microsoft.EntityFrameworkCore;
 
 namespace KeyPulse.Data;
@@ -9,10 +10,19 @@ public class ApplicationDbContext : DbContext
     public DbSet<DeviceInfo> Devices { get; set; }
     public DbSet<DeviceEvent> DeviceEvents { get; set; }
 
+    private static string GetDatabasePath()
+    {
+        var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+        var appName = Assembly.GetExecutingAssembly().GetName().Name ?? "KeyPulse";
+        var appFolder = Path.Combine(appData, appName);
+        if (!Directory.Exists(appFolder))
+            Directory.CreateDirectory(appFolder);
+        return Path.Combine(appFolder, "devices.db");
+    }
+
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
-        var databasePath = DataService.GetDatabasePath();
-        optionsBuilder.UseLazyLoadingProxies().UseSqlite($"Data Source={databasePath}");
+        optionsBuilder.UseLazyLoadingProxies().UseSqlite($"Data Source={GetDatabasePath()}");
     }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)

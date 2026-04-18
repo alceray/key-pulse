@@ -16,6 +16,8 @@ public class EventLogViewModel : ObservableObject, IDisposable
     [
         EventTypes.ConnectionEnded,
         EventTypes.ConnectionStarted,
+        EventTypes.AppStarted,
+        EventTypes.AppEnded,
     ];
 
     public ICollectionView EventLogCollection { get; }

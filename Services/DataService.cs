@@ -1,6 +1,4 @@
 ﻿using System.Diagnostics;
-using System.IO;
-using System.Reflection;
 using KeyPulse.Data;
 using KeyPulse.Models;
 using Microsoft.EntityFrameworkCore;
@@ -15,16 +13,6 @@ public class DataService
     {
         _context = context;
         InitializeDatabase();
-    }
-
-    public static string GetDatabasePath()
-    {
-        var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-        var appName = Assembly.GetExecutingAssembly().GetName().Name ?? "KeyPulse";
-        var appFolder = Path.Combine(appData, appName);
-        if (!Directory.Exists(appFolder))
-            Directory.CreateDirectory(appFolder);
-        return Path.Combine(appFolder, "devices.db");
     }
 
     private void InitializeDatabase()
