@@ -68,8 +68,10 @@ public class UsbMonitorService : IDisposable
         return new ObservableCollection<DeviceInfo>(devices);
     }
 
-    private void UpsertDevice(DeviceInfo device, bool isActive)
+    private void UpsertDevice(DeviceInfo device, bool isActive, bool forceStartSession = false)
     {
+        var wasActive = device.IsActive;
+
         if (!DeviceList.Any(d => d.DeviceId == device.DeviceId))
         {
             device.PropertyChanged += Device_PropertyChanged;
@@ -77,6 +79,11 @@ public class UsbMonitorService : IDisposable
         }
 
         device.IsActive = isActive;
+        if (isActive && (!wasActive || forceStartSession))
+            device.BeginSession();
+        else if (!isActive && wasActive)
+            device.EndSession();
+
         if (!isActive)
             device.TotalUsage = _dataService.GetTotalUsage(device.DeviceId);
         _dataService.SaveDevice(device);
@@ -344,7 +351,8 @@ public class UsbMonitorService : IDisposable
                         EventType = EventTypes.ConnectionStarted,
                     }
                 );
-                UpsertDevice(currDevice, true);
+                // Always start a fresh in-app session, even if a stale IsActive=true was persisted.
+                UpsertDevice(currDevice, true, forceStartSession: true);
             }
         }
         catch (Exception ex)

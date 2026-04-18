@@ -1,6 +1,5 @@
 ﻿using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
-using System.Diagnostics;
 using KeyPulse.Helpers;
 
 namespace KeyPulse.Models;
@@ -18,7 +17,7 @@ public class DeviceInfo : ObservableObject
 {
     private bool _isActive = false;
     private string _deviceName = "Unknown Device";
-    private readonly Stopwatch _currentSessionTimer = new();
+    private DateTime? _currentSessionStartUtc;
     private TimeSpan _totalUsage = TimeSpan.Zero;
 
     [Key]
@@ -51,16 +50,27 @@ public class DeviceInfo : ObservableObject
             {
                 _isActive = value;
                 OnPropertyChanged(nameof(IsActive));
-                if (_isActive)
-                    _currentSessionTimer.Restart();
-                else
-                    _currentSessionTimer.Reset();
             }
         }
     }
 
     [NotMapped]
-    public TimeSpan CurrentSessionUsage => _currentSessionTimer.Elapsed;
+    public TimeSpan CurrentSessionUsage =>
+        _currentSessionStartUtc.HasValue
+            ? DateTime.UtcNow - _currentSessionStartUtc.Value
+            : TimeSpan.Zero;
+
+    public void BeginSession(DateTime? sessionStartUtc = null)
+    {
+        _currentSessionStartUtc = sessionStartUtc ?? DateTime.UtcNow;
+        OnPropertyChanged(nameof(CurrentSessionUsage));
+    }
+
+    public void EndSession()
+    {
+        _currentSessionStartUtc = null;
+        OnPropertyChanged(nameof(CurrentSessionUsage));
+    }
 
     // The new closing device event must be saved before calculating total usage to get the most accurate result
     public TimeSpan TotalUsage
