@@ -31,7 +31,6 @@ public class DeviceInfo : ObservableObject
 {
     private bool _isActive = false;
     private string _deviceName = "Unknown Device";
-    private DateTime? _currentSessionStartUtc;
     private TimeSpan _totalUsage = TimeSpan.Zero;
 
     /// <summary>
@@ -83,36 +82,6 @@ public class DeviceInfo : ObservableObject
     }
 
     /// <summary>
-    /// Calculates usage time for the current session (from BeginSession to now).
-    /// Returns zero if device is not actively connected.
-    /// Not persisted to database; calculated on-the-fly.
-    /// </summary>
-    [NotMapped]
-    public TimeSpan CurrentSessionUsage =>
-        _currentSessionStartUtc.HasValue
-            ? DateTime.UtcNow - _currentSessionStartUtc.Value
-            : TimeSpan.Zero;
-
-    /// <summary>
-    /// Marks the start of a device usage session.
-    /// </summary>
-    /// <param name="sessionStartUtc">Optional UTC timestamp; defaults to now if not provided.</param>
-    public void BeginSession(DateTime? sessionStartUtc = null)
-    {
-        _currentSessionStartUtc = sessionStartUtc ?? DateTime.UtcNow;
-        OnPropertyChanged(nameof(CurrentSessionUsage));
-    }
-
-    /// <summary>
-    /// Marks the end of the current device usage session.
-    /// </summary>
-    public void EndSession()
-    {
-        _currentSessionStartUtc = null;
-        OnPropertyChanged(nameof(CurrentSessionUsage));
-    }
-
-    /// <summary>
     /// Cumulative usage time across all sessions.
     /// Must be updated after device disconnection events to capture the final session duration.
     /// Persisted to database.
@@ -128,11 +97,32 @@ public class DeviceInfo : ObservableObject
     }
 
     /// <summary>
-    /// Forces a refresh of the CurrentSessionUsage UI binding.
-    /// Called when the timer updates the displayed usage in real-time.
+    /// Caches the last connected time relative string.
     /// </summary>
-    public void UpdateCurrentSessionUsage()
+    private string _lastConnectedRelative = "N/A";
+
+    /// <summary>
+    /// Raw UTC timestamp of the last connection — used as sort key for the UI column.
+    /// Not persisted to database; populated from event history.
+    /// </summary>
+    [NotMapped]
+    public DateTime? LastConnectedAt { get; set; }
+
+    /// <summary>
+    /// Formatted relative time since last connection (e.g., "2 hours ago").
+    /// Computed from event history.
+    /// </summary>
+    [NotMapped]
+    public string LastConnectedRelative
     {
-        OnPropertyChanged(nameof(CurrentSessionUsage));
+        get => _lastConnectedRelative;
+        set
+        {
+            if (_lastConnectedRelative != value)
+            {
+                _lastConnectedRelative = value;
+                OnPropertyChanged(nameof(LastConnectedRelative));
+            }
+        }
     }
 }

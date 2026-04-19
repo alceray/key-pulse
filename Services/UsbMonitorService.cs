@@ -32,6 +32,10 @@ public class UsbMonitorService : IDisposable
     {
         _dataService = dataService;
         DeviceList = GetAllDevices();
+
+        // Recover from any previous unclean shutdown before loading events, so the log is consistent from the start.
+        _dataService.RecoverFromCrash();
+
         DeviceEventList = new ObservableCollection<DeviceEvent>(_dataService.GetAllDeviceEvents());
 
         // TODO: Handle app/system crashes before uncommenting
@@ -68,10 +72,8 @@ public class UsbMonitorService : IDisposable
         return new ObservableCollection<DeviceInfo>(devices);
     }
 
-    private void UpsertDevice(DeviceInfo device, bool isActive, bool forceStartSession = false)
+    private void UpsertDevice(DeviceInfo device, bool isActive)
     {
-        var wasActive = device.IsActive;
-
         if (!DeviceList.Any(d => d.DeviceId == device.DeviceId))
         {
             device.PropertyChanged += Device_PropertyChanged;
@@ -79,10 +81,6 @@ public class UsbMonitorService : IDisposable
         }
 
         device.IsActive = isActive;
-        if (isActive && (!wasActive || forceStartSession))
-            device.BeginSession();
-        else if (!isActive && wasActive)
-            device.EndSession();
 
         if (!isActive)
             device.TotalUsage = _dataService.GetTotalUsage(device.DeviceId);
@@ -109,10 +107,8 @@ public class UsbMonitorService : IDisposable
             if (string.IsNullOrEmpty(deviceId))
                 return;
 
-            var keyboardIncrement =
-                instance.GetPropertyValue("PNPClass")?.ToString() == "Keyboard" ? 1 : 0;
-            var mouseIncrement =
-                instance.GetPropertyValue("PNPClass")?.ToString() == "Mouse" ? 1 : 0;
+            var keyboardIncrement = instance.GetPropertyValue("PNPClass")?.ToString() == "Keyboard" ? 1 : 0;
+            var mouseIncrement = instance.GetPropertyValue("PNPClass")?.ToString() == "Mouse" ? 1 : 0;
 
             if (_recentlyInsertedDevices.TryGetValue(deviceId, out var value))
             {
@@ -127,13 +123,11 @@ public class UsbMonitorService : IDisposable
 
                 //Debug.WriteLine($"Inserted device {deviceId}: {keyboardCount} {mouseCount}");
 
-                var deviceType =
-                    keyboardCount > mouseCount ? DeviceTypes.Keyboard : DeviceTypes.Mouse;
+                var deviceType = keyboardCount > mouseCount ? DeviceTypes.Keyboard : DeviceTypes.Mouse;
                 var device = _dataService.GetDevice(deviceId);
                 if (device == null)
                 {
-                    var deviceName =
-                        PowershellScripts.GetDeviceName(deviceId) ?? _unknownDeviceName;
+                    var deviceName = PowershellScripts.GetDeviceName(deviceId) ?? _unknownDeviceName;
                     device = new DeviceInfo
                     {
                         DeviceId = deviceId,
@@ -160,11 +154,7 @@ public class UsbMonitorService : IDisposable
             }
             else
             {
-                _recentlyInsertedDevices[deviceId] = (
-                    keyboardIncrement,
-                    mouseIncrement,
-                    DateTime.Now
-                );
+                _recentlyInsertedDevices[deviceId] = (keyboardIncrement, mouseIncrement, DateTime.Now);
             }
         }
         catch (Exception ex)
@@ -186,18 +176,10 @@ public class UsbMonitorService : IDisposable
                 return;
             _recentlyInsertedDevices.TryRemove(deviceId, out _);
 
-            var device =
-                _dataService.GetDevice(deviceId)
-                ?? throw new Exception($"Removed device does not exist");
+            var device = _dataService.GetDevice(deviceId) ?? throw new Exception($"Removed device does not exist");
             if (device.IsActive)
             {
-                AddDeviceEvent(
-                    new DeviceEvent
-                    {
-                        DeviceId = device.DeviceId,
-                        EventType = EventTypes.Disconnected,
-                    }
-                );
+                AddDeviceEvent(new DeviceEvent { DeviceId = device.DeviceId, EventType = EventTypes.Disconnected });
                 UpsertDevice(device, false);
             }
         }
@@ -241,10 +223,7 @@ public class UsbMonitorService : IDisposable
         return deviceId[startIndex..endIndex];
     }
 
-    private void Device_PropertyChanged(
-        object? sender,
-        System.ComponentModel.PropertyChangedEventArgs e
-    )
+    private void Device_PropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
         if (sender is DeviceInfo device)
             if (e.PropertyName == nameof(DeviceInfo.DeviceName))
@@ -314,14 +293,9 @@ public class UsbMonitorService : IDisposable
             {
                 var deviceId = kvp.Key;
                 var objects = kvp.Value;
-                var keyboardCount = objects.Count(obj =>
-                    obj.GetPropertyValue("PNPClass")?.ToString() == "Keyboard"
-                );
-                var mouseCount = objects.Count(obj =>
-                    obj.GetPropertyValue("PNPClass")?.ToString() == "Mouse"
-                );
-                var deviceType =
-                    keyboardCount > mouseCount ? DeviceTypes.Keyboard : DeviceTypes.Mouse;
+                var keyboardCount = objects.Count(obj => obj.GetPropertyValue("PNPClass")?.ToString() == "Keyboard");
+                var mouseCount = objects.Count(obj => obj.GetPropertyValue("PNPClass")?.ToString() == "Mouse");
+                var deviceType = keyboardCount > mouseCount ? DeviceTypes.Keyboard : DeviceTypes.Mouse;
 
                 //Debug.WriteLine($"Counts: {deviceId} {keyboardCount} {mouseCount}");
 
@@ -334,8 +308,7 @@ public class UsbMonitorService : IDisposable
                 }
                 else
                 {
-                    var deviceName =
-                        PowershellScripts.GetDeviceName(deviceId) ?? _unknownDeviceName;
+                    var deviceName = PowershellScripts.GetDeviceName(deviceId) ?? _unknownDeviceName;
                     currDevice = new DeviceInfo
                     {
                         DeviceId = deviceId,
@@ -345,14 +318,9 @@ public class UsbMonitorService : IDisposable
                 }
 
                 AddDeviceEvent(
-                    new DeviceEvent
-                    {
-                        DeviceId = currDevice.DeviceId,
-                        EventType = EventTypes.ConnectionStarted,
-                    }
+                    new DeviceEvent { DeviceId = currDevice.DeviceId, EventType = EventTypes.ConnectionStarted }
                 );
-                // Always start a fresh in-app session, even if a stale IsActive=true was persisted.
-                UpsertDevice(currDevice, true, forceStartSession: true);
+                UpsertDevice(currDevice, true);
             }
         }
         catch (Exception ex)
@@ -379,11 +347,7 @@ public class UsbMonitorService : IDisposable
                 if (device.IsActive)
                 {
                     AddDeviceEvent(
-                        new DeviceEvent
-                        {
-                            DeviceId = device.DeviceId,
-                            EventType = EventTypes.ConnectionEnded,
-                        }
+                        new DeviceEvent { DeviceId = device.DeviceId, EventType = EventTypes.ConnectionEnded }
                     );
                     UpsertDevice(device, false);
                 }

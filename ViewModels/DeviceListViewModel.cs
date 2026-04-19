@@ -14,13 +14,14 @@ namespace KeyPulse.ViewModels;
 public class DeviceListViewModel : ObservableObject, IDisposable
 {
     private readonly UsbMonitorService _usbMonitorService;
+    private readonly DataService _dataService;
     private readonly DispatcherTimer _timer;
+    private readonly DateTime _appSessionStartUtc = DateTime.UtcNow;
 
     public ICollectionView DeviceListCollection { get; }
     public ICommand RenameDeviceCommand { get; }
 
-    public string DeviceTitleWithCount =>
-        $"Devices ({DeviceListCollection.Cast<object>().Count()})";
+    public string DeviceTitleWithCount => $"Devices ({DeviceListCollection.Cast<object>().Count()})";
 
     public bool ShowAllDevices
     {
@@ -42,9 +43,28 @@ public class DeviceListViewModel : ObservableObject, IDisposable
 
     private bool _showAllDevices = false;
 
-    public DeviceListViewModel(UsbMonitorService usbMonitorService)
+    /// <summary>
+    /// Formatted current app session time (HH:mm:ss).
+    /// </summary>
+    public string CurrentSessionTime
+    {
+        get => _currentSessionTime;
+        set
+        {
+            if (_currentSessionTime != value)
+            {
+                _currentSessionTime = value;
+                OnPropertyChanged(nameof(CurrentSessionTime));
+            }
+        }
+    }
+
+    private string _currentSessionTime = "00:00:00";
+
+    public DeviceListViewModel(UsbMonitorService usbMonitorService, DataService dataService)
     {
         _usbMonitorService = usbMonitorService;
+        _dataService = dataService;
 
         DeviceListCollection = CollectionViewSource.GetDefaultView(_usbMonitorService.DeviceList);
         DeviceListCollection.Filter = device => ShowAllDevices || ((DeviceInfo)device).IsActive;
@@ -59,10 +79,24 @@ public class DeviceListViewModel : ObservableObject, IDisposable
         _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         _timer.Tick += (s, e) =>
         {
+            // Update app session time
+            var elapsed = DateTime.UtcNow - _appSessionStartUtc;
+            CurrentSessionTime = $"{(int)elapsed.TotalHours:D2}:{elapsed.Minutes:D2}:{elapsed.Seconds:D2}";
+
+            // Update device last connected times and total usage
             foreach (var device in _usbMonitorService.DeviceList)
                 Application.Current.Dispatcher.BeginInvoke(() =>
-                    device.UpdateCurrentSessionUsage()
-                );
+                {
+                    // Update last connected time
+                    var lastConnected = _dataService.GetLastConnectedTime(device.DeviceId);
+                    if (lastConnected.HasValue)
+                    {
+                        device.LastConnectedAt = lastConnected;
+                        device.LastConnectedRelative = DateTimeFormatter.ToRelativeTime(lastConnected.Value);
+                    }
+                    // Update total usage in real-time (accumulates current session for active devices)
+                    device.TotalUsage = _dataService.GetTotalUsage(device.DeviceId);
+                });
         };
         _timer.Start();
     }

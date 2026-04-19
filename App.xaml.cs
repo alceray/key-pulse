@@ -27,6 +27,18 @@ public partial class App : System.Windows.Application
 
     protected override void OnStartup(StartupEventArgs e)
     {
+        // Attempt clean shutdown on unhandled exceptions (crashes).
+        // Force-kills (IDE stop, TerminateProcess) cannot be caught — RecoverFromCrash() handles those.
+        AppDomain.CurrentDomain.UnhandledException += (s, args) =>
+        {
+            Debug.WriteLine($"Unhandled exception: {args.ExceptionObject}");
+            _usbMonitorService?.Dispose();
+        };
+        DispatcherUnhandledException += (s, args) =>
+        {
+            Debug.WriteLine($"Dispatcher unhandled exception: {args.Exception}");
+            _usbMonitorService?.Dispose();
+        };
         _appName = Assembly.GetExecutingAssembly().GetName().Name ?? "KeyPulse";
         _appMutex = new Mutex(true, _appName, out var canCreateApp);
         if (!canCreateApp)
@@ -45,9 +57,7 @@ public partial class App : System.Windows.Application
         ServiceProvider = services.BuildServiceProvider();
         _usbMonitorService = ServiceProvider.GetRequiredService<UsbMonitorService>();
 
-        RunInBackground =
-            bool.TryParse(ConfigurationManager.AppSettings["RunInBackground"], out var result)
-            && result;
+        RunInBackground = bool.TryParse(ConfigurationManager.AppSettings["RunInBackground"], out var result) && result;
         if (RunInBackground)
         {
             InitializeTrayIcon();
@@ -95,13 +105,7 @@ public partial class App : System.Windows.Application
     {
         _trayIcon = new NotifyIcon
         {
-            Icon = new Icon(
-                Path.Combine(
-                    AppDomain.CurrentDomain.BaseDirectory,
-                    "Assets",
-                    "keyboard_mouse_icon.ico"
-                )
-            ),
+            Icon = new Icon(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Assets", "keyboard_mouse_icon.ico")),
             Visible = true,
             Text = _appName,
             ContextMenuStrip = new ContextMenuStrip(),

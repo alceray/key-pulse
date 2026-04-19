@@ -12,59 +12,80 @@
   </UserControl.Resources>
 
   <Grid>
-    <StackPanel>
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="*" />
+    </Grid.RowDefinitions>
+
+    <!-- Controls and Session Info Row -->
+    <Grid Grid.Row="0" Margin="5">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="Auto" />
+        <ColumnDefinition Width="*" />
+        <ColumnDefinition Width="Auto" />
+      </Grid.ColumnDefinitions>
+
       <CheckBox
+        Grid.Column="0"
         Content="Show All Devices"
         IsChecked="{Binding ShowAllDevices, Mode=TwoWay}"
-        HorizontalAlignment="Left"
-        Margin="5"
+        VerticalAlignment="Center"
       />
-      <DataGrid
-        ItemsSource="{Binding DeviceListCollection}"
-        AutoGenerateColumns="False"
-        IsReadOnly="True"
-        SelectionMode="Single"
-        CanUserResizeColumns="False"
-        CanUserResizeRows="False"
-      >
-        <DataGrid.Columns>
-          <DataGridTextColumn Header="Device ID" Binding="{Binding DeviceId}" Width="Auto" />
-          <DataGridTextColumn Header="Device Type" Binding="{Binding DeviceType}" Width="Auto" />
-          <DataGridTextColumn Header="Device Name" Binding="{Binding DeviceName}" Width="*" />
-          <DataGridTextColumn
-            Header="Current Session"
-            Binding="{Binding CurrentSessionUsage, Converter={StaticResource TimeSpanToStringConverter}}"
-            Width="Auto"
+
+      <StackPanel Grid.Column="2" Orientation="Vertical" HorizontalAlignment="Right">
+        <TextBlock Text="Current Session" FontWeight="Bold" TextAlignment="Right" />
+        <TextBlock Text="{Binding CurrentSessionTime}" FontSize="16" TextAlignment="Right" />
+      </StackPanel>
+    </Grid>
+
+    <!-- Device List -->
+    <DataGrid
+      Grid.Row="1"
+      ItemsSource="{Binding DeviceListCollection}"
+      AutoGenerateColumns="False"
+      IsReadOnly="True"
+      SelectionMode="Single"
+      CanUserResizeColumns="False"
+      CanUserResizeRows="False"
+    >
+      <DataGrid.Columns>
+        <DataGridTextColumn Header="Device ID" Binding="{Binding DeviceId}" Width="Auto" />
+        <DataGridTextColumn Header="Device Type" Binding="{Binding DeviceType}" Width="Auto" />
+        <DataGridTextColumn Header="Device Name" Binding="{Binding DeviceName}" Width="*" />
+        <DataGridTextColumn
+          Header="Last Connected"
+          Binding="{Binding LastConnectedRelative}"
+          SortMemberPath="LastConnectedAt"
+          Width="Auto"
+        />
+        <DataGridTextColumn
+          Header="Total Usage"
+          Binding="{Binding TotalUsage, Converter={StaticResource TimeSpanToStringConverter}}"
+          MinWidth="80"
+          Width="Auto"
+        />
+        <DataGridTemplateColumn Header="Connected" Width="Auto">
+          <DataGridTemplateColumn.CellTemplate>
+            <DataTemplate>
+              <TextBlock
+                Text="✓"
+                Visibility="{Binding IsActive, Converter={StaticResource BooleanToVisibilityConverter}}"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+              />
+            </DataTemplate>
+          </DataGridTemplateColumn.CellTemplate>
+        </DataGridTemplateColumn>
+      </DataGrid.Columns>
+      <DataGrid.ContextMenu>
+        <ContextMenu>
+          <MenuItem
+            Header="Rename Device"
+            Command="{Binding RenameDeviceCommand}"
+            CommandParameter="{Binding PlacementTarget.SelectedItem,RelativeSource={RelativeSource AncestorType=ContextMenu}}"
           />
-          <DataGridTextColumn
-            Header="Total Usage"
-            Binding="{Binding TotalUsage, Converter={StaticResource TimeSpanToStringConverter}}"
-            MinWidth="80"
-            Width="Auto"
-          />
-          <DataGridTemplateColumn Header="Connected" Width="Auto">
-            <DataGridTemplateColumn.CellTemplate>
-              <DataTemplate>
-                <TextBlock
-                  Text="✓"
-                  Visibility="{Binding IsActive, Converter={StaticResource BooleanToVisibilityConverter}}"
-                  HorizontalAlignment="Center"
-                  VerticalAlignment="Center"
-                />
-              </DataTemplate>
-            </DataGridTemplateColumn.CellTemplate>
-          </DataGridTemplateColumn>
-        </DataGrid.Columns>
-        <DataGrid.ContextMenu>
-          <ContextMenu>
-            <MenuItem
-              Header="Rename Device"
-              Command="{Binding RenameDeviceCommand}"
-              CommandParameter="{Binding PlacementTarget.SelectedItem,RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-            />
-          </ContextMenu>
-        </DataGrid.ContextMenu>
-      </DataGrid>
-    </StackPanel>
+        </ContextMenu>
+      </DataGrid.ContextMenu>
+    </DataGrid>
   </Grid>
 </UserControl>
