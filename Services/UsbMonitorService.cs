@@ -31,10 +31,12 @@ public class UsbMonitorService : IDisposable
     public UsbMonitorService(DataService dataService)
     {
         _dataService = dataService;
-        DeviceList = GetAllDevices();
 
         // Recover from any previous unclean shutdown before loading events, so the log is consistent from the start.
         _dataService.RecoverFromCrash();
+        _dataService.RebuildDeviceSnapshots();
+
+        DeviceList = GetAllDevices();
 
         DeviceEventList = new ObservableCollection<DeviceEvent>(_dataService.GetAllDeviceEvents());
 
@@ -72,18 +74,38 @@ public class UsbMonitorService : IDisposable
         return new ObservableCollection<DeviceInfo>(devices);
     }
 
-    private void UpsertDevice(DeviceInfo device, bool isActive)
+    private void UpsertDevice(
+        DeviceInfo device,
+        bool isActive,
+        DateTime? eventTimestampUtc = null,
+        bool updateLastConnectedAt = false
+    )
     {
+        var eventTimestamp = eventTimestampUtc ?? DateTime.UtcNow;
+
         if (!DeviceList.Any(d => d.DeviceId == device.DeviceId))
         {
             device.PropertyChanged += Device_PropertyChanged;
             Application.Current.Dispatcher.Invoke(() => DeviceList.Add(device));
         }
 
-        device.IsActive = isActive;
+        if (isActive)
+        {
+            if (!device.IsActive)
+            {
+                device.IsActive = true;
+                device.StartActiveSession(eventTimestamp);
+            }
+        }
+        else if (device.IsActive)
+        {
+            device.EndActiveSession(eventTimestamp);
+            device.IsActive = false;
+        }
 
-        if (!isActive)
-            device.TotalUsage = _dataService.GetTotalUsage(device.DeviceId);
+        if (updateLastConnectedAt)
+            device.LastConnectedAt = eventTimestamp;
+
         _dataService.SaveDevice(device);
     }
 
@@ -140,7 +162,8 @@ public class UsbMonitorService : IDisposable
                     device.DeviceType = deviceType;
                 }
 
-                if (!device.IsActive)
+                var isNewConnection = !device.IsActive;
+                if (isNewConnection)
                     AddDeviceEvent(
                         new DeviceEvent
                         {
@@ -150,11 +173,11 @@ public class UsbMonitorService : IDisposable
                         }
                     );
 
-                UpsertDevice(device, true);
+                UpsertDevice(device, true, firstTimestamp, isNewConnection);
             }
             else
             {
-                _recentlyInsertedDevices[deviceId] = (keyboardIncrement, mouseIncrement, DateTime.Now);
+                _recentlyInsertedDevices[deviceId] = (keyboardIncrement, mouseIncrement, DateTime.UtcNow);
             }
         }
         catch (Exception ex)
@@ -179,8 +202,14 @@ public class UsbMonitorService : IDisposable
             var device = _dataService.GetDevice(deviceId) ?? throw new Exception($"Removed device does not exist");
             if (device.IsActive)
             {
-                AddDeviceEvent(new DeviceEvent { DeviceId = device.DeviceId, EventType = EventTypes.Disconnected });
-                UpsertDevice(device, false);
+                var disconnectedEvent = new DeviceEvent
+                {
+                    DeviceId = device.DeviceId,
+                    EventType = EventTypes.Disconnected,
+                    Timestamp = DateTime.UtcNow,
+                };
+                AddDeviceEvent(disconnectedEvent);
+                UpsertDevice(device, false, disconnectedEvent.Timestamp);
             }
         }
         catch (Exception ex)
@@ -269,7 +298,7 @@ public class UsbMonitorService : IDisposable
     {
         try
         {
-            AddDeviceEvent(new DeviceEvent { EventType = EventTypes.AppStarted });
+            AddDeviceEvent(new DeviceEvent { EventType = EventTypes.AppStarted, Timestamp = DateTime.UtcNow });
 
             var devicesById = new Dictionary<string, List<ManagementBaseObject>>();
             ManagementObjectSearcher searcher = new(
@@ -317,10 +346,14 @@ public class UsbMonitorService : IDisposable
                     };
                 }
 
-                AddDeviceEvent(
-                    new DeviceEvent { DeviceId = currDevice.DeviceId, EventType = EventTypes.ConnectionStarted }
-                );
-                UpsertDevice(currDevice, true);
+                var connectionStartedEvent = new DeviceEvent
+                {
+                    DeviceId = currDevice.DeviceId,
+                    EventType = EventTypes.ConnectionStarted,
+                    Timestamp = DateTime.UtcNow,
+                };
+                AddDeviceEvent(connectionStartedEvent);
+                UpsertDevice(currDevice, true, connectionStartedEvent.Timestamp, currDevice.LastConnectedAt == null);
             }
         }
         catch (Exception ex)
@@ -346,16 +379,20 @@ public class UsbMonitorService : IDisposable
             {
                 if (device.IsActive)
                 {
-                    AddDeviceEvent(
-                        new DeviceEvent { DeviceId = device.DeviceId, EventType = EventTypes.ConnectionEnded }
-                    );
-                    UpsertDevice(device, false);
+                    var connectionEndedEvent = new DeviceEvent
+                    {
+                        DeviceId = device.DeviceId,
+                        EventType = EventTypes.ConnectionEnded,
+                        Timestamp = DateTime.UtcNow,
+                    };
+                    AddDeviceEvent(connectionEndedEvent);
+                    UpsertDevice(device, false, connectionEndedEvent.Timestamp);
                 }
 
                 device.PropertyChanged -= Device_PropertyChanged;
             }
 
-            AddDeviceEvent(new DeviceEvent { EventType = EventTypes.AppEnded });
+            AddDeviceEvent(new DeviceEvent { EventType = EventTypes.AppEnded, Timestamp = DateTime.UtcNow });
 
             if (_insertWatcher != null)
             {

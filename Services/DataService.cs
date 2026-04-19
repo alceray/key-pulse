@@ -74,6 +74,10 @@ public class DataService
         }
     }
 
+    /// <summary>
+    /// Recomputes total usage for a device from the event log.
+    /// Used for snapshot rebuild/recovery.
+    /// </summary>
     public TimeSpan GetTotalUsage(string deviceId)
     {
         var totalUsage = TimeSpan.Zero;
@@ -221,5 +225,29 @@ public class DataService
 
         _context.SaveChanges();
         Debug.WriteLine("RecoverFromCrash: wrote missing AppEnded and ConnectionEnded events.");
+    }
+
+    /// <summary>
+    /// Rebuilds persisted device snapshots from the event log.
+    /// DeviceEvents remain the repair source of truth; DeviceInfo acts as the fast-read snapshot.
+    /// </summary>
+    public void RebuildDeviceSnapshots()
+    {
+        try
+        {
+            var devices = _context.Devices.ToList();
+            foreach (var device in devices)
+            {
+                device.TotalUsage = GetTotalUsage(device.DeviceId);
+                device.LastConnectedAt = GetLastConnectedTime(device.DeviceId);
+                device.IsActive = false;
+            }
+
+            _context.SaveChanges();
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"ERROR in RebuildDeviceSnapshots: {ex.Message}");
+        }
     }
 }

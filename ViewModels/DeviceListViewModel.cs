@@ -14,7 +14,6 @@ namespace KeyPulse.ViewModels;
 public class DeviceListViewModel : ObservableObject, IDisposable
 {
     private readonly UsbMonitorService _usbMonitorService;
-    private readonly DataService _dataService;
     private readonly DispatcherTimer _timer;
     private readonly DateTime _appSessionStartUtc = DateTime.UtcNow;
 
@@ -61,10 +60,9 @@ public class DeviceListViewModel : ObservableObject, IDisposable
 
     private string _currentSessionTime = "00:00:00";
 
-    public DeviceListViewModel(UsbMonitorService usbMonitorService, DataService dataService)
+    public DeviceListViewModel(UsbMonitorService usbMonitorService)
     {
         _usbMonitorService = usbMonitorService;
-        _dataService = dataService;
 
         DeviceListCollection = CollectionViewSource.GetDefaultView(_usbMonitorService.DeviceList);
         DeviceListCollection.Filter = device => ShowAllDevices || ((DeviceInfo)device).IsActive;
@@ -83,20 +81,9 @@ public class DeviceListViewModel : ObservableObject, IDisposable
             var elapsed = DateTime.UtcNow - _appSessionStartUtc;
             CurrentSessionTime = $"{(int)elapsed.TotalHours:D2}:{elapsed.Minutes:D2}:{elapsed.Seconds:D2}";
 
-            // Update device last connected times and total usage
+            // Refresh in-memory dynamic device display values.
             foreach (var device in _usbMonitorService.DeviceList)
-                Application.Current.Dispatcher.BeginInvoke(() =>
-                {
-                    // Update last connected time
-                    var lastConnected = _dataService.GetLastConnectedTime(device.DeviceId);
-                    if (lastConnected.HasValue)
-                    {
-                        device.LastConnectedAt = lastConnected;
-                        device.LastConnectedRelative = DateTimeFormatter.ToRelativeTime(lastConnected.Value);
-                    }
-                    // Update total usage in real-time (accumulates current session for active devices)
-                    device.TotalUsage = _dataService.GetTotalUsage(device.DeviceId);
-                });
+                device.RefreshDynamicProperties();
         };
         _timer.Start();
     }

@@ -31,7 +31,9 @@ public class DeviceInfo : ObservableObject
 {
     private bool _isActive = false;
     private string _deviceName = "Unknown Device";
-    private TimeSpan _totalUsage = TimeSpan.Zero;
+    private TimeSpan _storedTotalUsage = TimeSpan.Zero;
+    private DateTime? _lastConnectedAt;
+    private DateTime? _activeSessionStartedAtUtc;
 
     /// <summary>
     /// Unique identifier for the device in format: USB\VID_xxxx&PID_xxxx
@@ -82,47 +84,82 @@ public class DeviceInfo : ObservableObject
     }
 
     /// <summary>
-    /// Cumulative usage time across all sessions.
-    /// Must be updated after device disconnection events to capture the final session duration.
-    /// Persisted to database.
+    /// Cumulative usage time across all completed sessions.
+    /// When the device is active, the current session duration is added in-memory for display.
+    /// The stored value is only persisted on event boundaries.
     /// </summary>
     public TimeSpan TotalUsage
     {
-        get => _totalUsage;
+        get =>
+            _storedTotalUsage
+            + (
+                IsActive && _activeSessionStartedAtUtc.HasValue
+                    ? DateTime.UtcNow - _activeSessionStartedAtUtc.Value
+                    : TimeSpan.Zero
+            );
         set
         {
-            _totalUsage = value;
+            _storedTotalUsage = value;
             OnPropertyChanged(nameof(TotalUsage));
         }
     }
 
     /// <summary>
-    /// Caches the last connected time relative string.
+    /// Starts tracking the current active session in memory.
     /// </summary>
-    private string _lastConnectedRelative = "N/A";
-
-    /// <summary>
-    /// Raw UTC timestamp of the last connection — used as sort key for the UI column.
-    /// Not persisted to database; populated from event history.
-    /// </summary>
-    [NotMapped]
-    public DateTime? LastConnectedAt { get; set; }
-
-    /// <summary>
-    /// Formatted relative time since last connection (e.g., "2 hours ago").
-    /// Computed from event history.
-    /// </summary>
-    [NotMapped]
-    public string LastConnectedRelative
+    public void StartActiveSession(DateTime? sessionStartedAtUtc = null)
     {
-        get => _lastConnectedRelative;
+        _activeSessionStartedAtUtc = sessionStartedAtUtc ?? DateTime.UtcNow;
+        OnPropertyChanged(nameof(TotalUsage));
+    }
+
+    /// <summary>
+    /// Finishes the current active session and folds it into the persisted usage snapshot.
+    /// </summary>
+    public void EndActiveSession(DateTime? sessionEndedAtUtc = null)
+    {
+        if (_activeSessionStartedAtUtc.HasValue)
+        {
+            var end = sessionEndedAtUtc ?? DateTime.UtcNow;
+            if (end > _activeSessionStartedAtUtc.Value)
+                _storedTotalUsage += end - _activeSessionStartedAtUtc.Value;
+            _activeSessionStartedAtUtc = null;
+        }
+
+        OnPropertyChanged(nameof(TotalUsage));
+    }
+
+    /// <summary>
+    /// Raw UTC timestamp of the last connection — persisted for fast loading/sorting.
+    /// </summary>
+    public DateTime? LastConnectedAt
+    {
+        get => _lastConnectedAt;
         set
         {
-            if (_lastConnectedRelative != value)
+            if (_lastConnectedAt != value)
             {
-                _lastConnectedRelative = value;
+                _lastConnectedAt = value;
+                OnPropertyChanged(nameof(LastConnectedAt));
                 OnPropertyChanged(nameof(LastConnectedRelative));
             }
         }
+    }
+
+    /// <summary>
+    /// Formatted relative time since last connection (e.g., "2 hours ago").
+    /// Computed from the persisted raw timestamp.
+    /// </summary>
+    [NotMapped]
+    public string LastConnectedRelative =>
+        LastConnectedAt.HasValue ? TimeFormatter.ToRelativeTime(LastConnectedAt.Value) : "N/A";
+
+    /// <summary>
+    /// Refreshes dynamic display-only properties that depend on the current time.
+    /// </summary>
+    public void RefreshDynamicProperties()
+    {
+        OnPropertyChanged(nameof(TotalUsage));
+        OnPropertyChanged(nameof(LastConnectedRelative));
     }
 }
