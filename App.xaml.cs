@@ -1,5 +1,4 @@
 ﻿using System.ComponentModel;
-using System.Configuration;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
@@ -57,7 +56,8 @@ public partial class App : System.Windows.Application
         ServiceProvider = services.BuildServiceProvider();
         _usbMonitorService = ServiceProvider.GetRequiredService<UsbMonitorService>();
 
-        RunInBackground = bool.TryParse(ConfigurationManager.AppSettings["RunInBackground"], out var result) && result;
+        RunInBackground =
+            bool.TryParse(Environment.GetEnvironmentVariable("KEYPULSE_RUN_IN_BACKGROUND"), out var result) && result;
         if (RunInBackground)
         {
             InitializeTrayIcon();

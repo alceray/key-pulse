@@ -97,7 +97,7 @@ public class DataService
 
         // If currently connected, add the time since the last opening event
         if (lastStartTime.HasValue)
-            totalUsage += DateTime.UtcNow - lastStartTime.Value;
+            totalUsage += DateTime.Now - lastStartTime.Value;
 
         return totalUsage;
     }

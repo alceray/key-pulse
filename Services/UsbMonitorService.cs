@@ -77,12 +77,10 @@ public class UsbMonitorService : IDisposable
     private void UpsertDevice(
         DeviceInfo device,
         bool isActive,
-        DateTime? eventTimestampUtc = null,
+        DateTime eventTimestamp,
         bool updateLastConnectedAt = false
     )
     {
-        var eventTimestamp = eventTimestampUtc ?? DateTime.UtcNow;
-
         if (!DeviceList.Any(d => d.DeviceId == device.DeviceId))
         {
             device.PropertyChanged += Device_PropertyChanged;
@@ -99,8 +97,8 @@ public class UsbMonitorService : IDisposable
         }
         else if (device.IsActive)
         {
-            device.EndActiveSession(eventTimestamp);
             device.IsActive = false;
+            device.EndActiveSession(eventTimestamp);
         }
 
         if (updateLastConnectedAt)
@@ -177,7 +175,7 @@ public class UsbMonitorService : IDisposable
             }
             else
             {
-                _recentlyInsertedDevices[deviceId] = (keyboardIncrement, mouseIncrement, DateTime.UtcNow);
+                _recentlyInsertedDevices[deviceId] = (keyboardIncrement, mouseIncrement, DateTime.Now);
             }
         }
         catch (Exception ex)
@@ -206,7 +204,7 @@ public class UsbMonitorService : IDisposable
                 {
                     DeviceId = device.DeviceId,
                     EventType = EventTypes.Disconnected,
-                    Timestamp = DateTime.UtcNow,
+                    Timestamp = DateTime.Now,
                 };
                 AddDeviceEvent(disconnectedEvent);
                 UpsertDevice(device, false, disconnectedEvent.Timestamp);
@@ -298,7 +296,7 @@ public class UsbMonitorService : IDisposable
     {
         try
         {
-            AddDeviceEvent(new DeviceEvent { EventType = EventTypes.AppStarted, Timestamp = DateTime.UtcNow });
+            AddDeviceEvent(new DeviceEvent { EventType = EventTypes.AppStarted, Timestamp = DateTime.Now });
 
             var devicesById = new Dictionary<string, List<ManagementBaseObject>>();
             ManagementObjectSearcher searcher = new(
@@ -350,7 +348,7 @@ public class UsbMonitorService : IDisposable
                 {
                     DeviceId = currDevice.DeviceId,
                     EventType = EventTypes.ConnectionStarted,
-                    Timestamp = DateTime.UtcNow,
+                    Timestamp = DateTime.Now,
                 };
                 AddDeviceEvent(connectionStartedEvent);
                 UpsertDevice(currDevice, true, connectionStartedEvent.Timestamp, currDevice.LastConnectedAt == null);
@@ -383,7 +381,7 @@ public class UsbMonitorService : IDisposable
                     {
                         DeviceId = device.DeviceId,
                         EventType = EventTypes.ConnectionEnded,
-                        Timestamp = DateTime.UtcNow,
+                        Timestamp = DateTime.Now,
                     };
                     AddDeviceEvent(connectionEndedEvent);
                     UpsertDevice(device, false, connectionEndedEvent.Timestamp);
@@ -392,7 +390,7 @@ public class UsbMonitorService : IDisposable
                 device.PropertyChanged -= Device_PropertyChanged;
             }
 
-            AddDeviceEvent(new DeviceEvent { EventType = EventTypes.AppEnded, Timestamp = DateTime.UtcNow });
+            AddDeviceEvent(new DeviceEvent { EventType = EventTypes.AppEnded, Timestamp = DateTime.Now });
 
             if (_insertWatcher != null)
             {

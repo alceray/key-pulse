@@ -29,6 +29,7 @@ public static class PowershellScripts
     private static Collection<PSObject> RunPowerShellScript(string script)
     {
         using var ps = PowerShell.Create();
+        ps.AddScript("Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process");
         ps.AddScript(script);
         var results = ps.Invoke();
 

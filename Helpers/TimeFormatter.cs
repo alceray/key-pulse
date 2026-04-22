@@ -10,9 +10,7 @@ public static class TimeFormatter
     /// </summary>
     public static string ToRelativeTime(DateTime dateTime)
     {
-        var now = DateTime.UtcNow;
-        var utcDateTime = dateTime.Kind == DateTimeKind.Utc ? dateTime : dateTime.ToUniversalTime();
-        var timeSpan = now - utcDateTime;
+        var timeSpan = DateTime.Now - dateTime;
 
         if (timeSpan.TotalSeconds < 60)
             return $"{(int)timeSpan.TotalSeconds} seconds ago";

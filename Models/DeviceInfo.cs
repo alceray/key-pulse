@@ -33,7 +33,7 @@ public class DeviceInfo : ObservableObject
     private string _deviceName = "Unknown Device";
     private TimeSpan _storedTotalUsage = TimeSpan.Zero;
     private DateTime? _lastConnectedAt;
-    private DateTime? _activeSessionStartedAtUtc;
+    private DateTime? _activeSessionStartedAt;
 
     /// <summary>
     /// Unique identifier for the device in format: USB\VID_xxxx&PID_xxxx
@@ -93,8 +93,8 @@ public class DeviceInfo : ObservableObject
         get =>
             _storedTotalUsage
             + (
-                IsActive && _activeSessionStartedAtUtc.HasValue
-                    ? DateTime.UtcNow - _activeSessionStartedAtUtc.Value
+                IsActive && _activeSessionStartedAt.HasValue
+                    ? DateTime.Now - _activeSessionStartedAt.Value
                     : TimeSpan.Zero
             );
         set
@@ -107,30 +107,30 @@ public class DeviceInfo : ObservableObject
     /// <summary>
     /// Starts tracking the current active session in memory.
     /// </summary>
-    public void StartActiveSession(DateTime? sessionStartedAtUtc = null)
+    public void StartActiveSession(DateTime? sessionStartedAt = null)
     {
-        _activeSessionStartedAtUtc = sessionStartedAtUtc ?? DateTime.UtcNow;
+        _activeSessionStartedAt = sessionStartedAt ?? DateTime.Now;
         OnPropertyChanged(nameof(TotalUsage));
     }
 
     /// <summary>
     /// Finishes the current active session and folds it into the persisted usage snapshot.
     /// </summary>
-    public void EndActiveSession(DateTime? sessionEndedAtUtc = null)
+    public void EndActiveSession(DateTime? sessionEndedAt = null)
     {
-        if (_activeSessionStartedAtUtc.HasValue)
+        if (_activeSessionStartedAt.HasValue)
         {
-            var end = sessionEndedAtUtc ?? DateTime.UtcNow;
-            if (end > _activeSessionStartedAtUtc.Value)
-                _storedTotalUsage += end - _activeSessionStartedAtUtc.Value;
-            _activeSessionStartedAtUtc = null;
+            var end = sessionEndedAt ?? DateTime.Now;
+            if (end > _activeSessionStartedAt.Value)
+                _storedTotalUsage += end - _activeSessionStartedAt.Value;
+            _activeSessionStartedAt = null;
         }
 
         OnPropertyChanged(nameof(TotalUsage));
     }
 
     /// <summary>
-    /// Raw UTC timestamp of the last connection — persisted for fast loading/sorting.
+    /// Raw timestamp of the last connection — persisted for fast loading/sorting.
     /// </summary>
     public DateTime? LastConnectedAt
     {
