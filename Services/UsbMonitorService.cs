@@ -15,6 +15,7 @@ public class UsbMonitorService : IDisposable
 
     public ObservableCollection<DeviceInfo> DeviceList;
     public ObservableCollection<DeviceEvent> DeviceEventList;
+    public DateTime AppSessionStartedAt { get; private set; }
 
     private readonly DataService _dataService;
 
@@ -74,43 +75,34 @@ public class UsbMonitorService : IDisposable
         return new ObservableCollection<DeviceInfo>(devices);
     }
 
-    private void UpsertDevice(
-        DeviceInfo device,
-        bool isActive,
-        DateTime eventTimestamp,
-        bool updateLastConnectedAt = false
-    )
+    private void AddDeviceEvent(DeviceEvent deviceEvent, DeviceInfo? device = null)
     {
+        Application.Current.Dispatcher.BeginInvoke(() => DeviceEventList.Add(deviceEvent));
+        _dataService.AddDeviceEvent(deviceEvent);
+
+        // Skip device operations for app-level events
+        if (deviceEvent.EventType.IsAppEvent() || device == null)
+            return;
+
+        // Ensure device is in the DeviceList
         if (!DeviceList.Any(d => d.DeviceId == device.DeviceId))
         {
             device.PropertyChanged += Device_PropertyChanged;
             Application.Current.Dispatcher.Invoke(() => DeviceList.Add(device));
         }
 
-        if (isActive)
+        // Perform device state management based on event type
+        if (deviceEvent.EventType.IsOpeningEvent())
         {
-            if (!device.IsActive)
-            {
-                device.IsActive = true;
-                device.StartActiveSession(eventTimestamp);
-            }
+            device.SessionStartedAt = deviceEvent.Timestamp;
+            device.LastConnectedAt ??= deviceEvent.Timestamp;
         }
-        else if (device.IsActive)
+        else if (deviceEvent.EventType.IsClosingEvent())
         {
-            device.IsActive = false;
-            device.EndActiveSession(eventTimestamp);
+            device.SessionStartedAt = null;
         }
-
-        if (updateLastConnectedAt)
-            device.LastConnectedAt = eventTimestamp;
 
         _dataService.SaveDevice(device);
-    }
-
-    private void AddDeviceEvent(DeviceEvent deviceEvent)
-    {
-        Application.Current.Dispatcher.BeginInvoke(() => DeviceEventList.Add(deviceEvent));
-        _dataService.AddDeviceEvent(deviceEvent);
     }
 
     private void DeviceInsertedEvent(object sender, EventArrivedEventArgs e)
@@ -155,23 +147,14 @@ public class UsbMonitorService : IDisposable
                         DeviceName = deviceName,
                     };
                 }
-                else
+
+                var connectedEvent = new DeviceEvent
                 {
-                    device.DeviceType = deviceType;
-                }
-
-                var isNewConnection = !device.IsActive;
-                if (isNewConnection)
-                    AddDeviceEvent(
-                        new DeviceEvent
-                        {
-                            Timestamp = firstTimestamp,
-                            DeviceId = deviceId,
-                            EventType = EventTypes.Connected,
-                        }
-                    );
-
-                UpsertDevice(device, true, firstTimestamp, isNewConnection);
+                    Timestamp = firstTimestamp,
+                    DeviceId = deviceId,
+                    EventType = EventTypes.Connected,
+                };
+                AddDeviceEvent(connectedEvent, device);
             }
             else
             {
@@ -206,8 +189,7 @@ public class UsbMonitorService : IDisposable
                     EventType = EventTypes.Disconnected,
                     Timestamp = DateTime.Now,
                 };
-                AddDeviceEvent(disconnectedEvent);
-                UpsertDevice(device, false, disconnectedEvent.Timestamp);
+                AddDeviceEvent(disconnectedEvent, device);
             }
         }
         catch (Exception ex)
@@ -296,7 +278,8 @@ public class UsbMonitorService : IDisposable
     {
         try
         {
-            AddDeviceEvent(new DeviceEvent { EventType = EventTypes.AppStarted, Timestamp = DateTime.Now });
+            AppSessionStartedAt = DateTime.Now;
+            AddDeviceEvent(new DeviceEvent { EventType = EventTypes.AppStarted, Timestamp = AppSessionStartedAt });
 
             var devicesById = new Dictionary<string, List<ManagementBaseObject>>();
             ManagementObjectSearcher searcher = new(
@@ -348,10 +331,9 @@ public class UsbMonitorService : IDisposable
                 {
                     DeviceId = currDevice.DeviceId,
                     EventType = EventTypes.ConnectionStarted,
-                    Timestamp = DateTime.Now,
+                    Timestamp = AppSessionStartedAt,
                 };
-                AddDeviceEvent(connectionStartedEvent);
-                UpsertDevice(currDevice, true, connectionStartedEvent.Timestamp, currDevice.LastConnectedAt == null);
+                AddDeviceEvent(connectionStartedEvent, currDevice);
             }
         }
         catch (Exception ex)
@@ -373,6 +355,7 @@ public class UsbMonitorService : IDisposable
 
         if (disposing)
         {
+            var sessionTimestamp = DateTime.Now;
             foreach (var device in DeviceList)
             {
                 if (device.IsActive)
@@ -381,16 +364,15 @@ public class UsbMonitorService : IDisposable
                     {
                         DeviceId = device.DeviceId,
                         EventType = EventTypes.ConnectionEnded,
-                        Timestamp = DateTime.Now,
+                        Timestamp = sessionTimestamp,
                     };
-                    AddDeviceEvent(connectionEndedEvent);
-                    UpsertDevice(device, false, connectionEndedEvent.Timestamp);
+                    AddDeviceEvent(connectionEndedEvent, device);
                 }
 
                 device.PropertyChanged -= Device_PropertyChanged;
             }
 
-            AddDeviceEvent(new DeviceEvent { EventType = EventTypes.AppEnded, Timestamp = DateTime.Now });
+            AddDeviceEvent(new DeviceEvent { EventType = EventTypes.AppEnded, Timestamp = sessionTimestamp });
 
             if (_insertWatcher != null)
             {

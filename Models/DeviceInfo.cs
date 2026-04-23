@@ -29,11 +29,10 @@ public enum DeviceTypes
 [Table("Devices")]
 public class DeviceInfo : ObservableObject
 {
-    private bool _isActive = false;
     private string _deviceName = "Unknown Device";
     private TimeSpan _storedTotalUsage = TimeSpan.Zero;
+    private DateTime? _sessionStartedAt;
     private DateTime? _lastConnectedAt;
-    private DateTime? _activeSessionStartedAt;
 
     /// <summary>
     /// Unique identifier for the device in format: USB\VID_xxxx&PID_xxxx
@@ -67,36 +66,25 @@ public class DeviceInfo : ObservableObject
 
     /// <summary>
     /// Whether the device is currently connected and active.
-    /// Notifies UI when changed.
+    /// Computed from whether SessionStartedAt has a value.
     /// </summary>
-    [Required]
-    public bool IsActive
-    {
-        get => _isActive;
-        set
-        {
-            if (_isActive != value)
-            {
-                _isActive = value;
-                OnPropertyChanged(nameof(IsActive));
-            }
-        }
-    }
+    [NotMapped]
+    public bool IsActive => _sessionStartedAt.HasValue;
 
     /// <summary>
-    /// Cumulative usage time across all completed sessions.
-    /// When the device is active, the current session duration is added in-memory for display.
-    /// The stored value is only persisted on event boundaries.
+    /// Cumulative usage time snapshot rebuilt from connection event boundaries.
+    /// While active, display value ticks by adding elapsed time since SessionStartedAt.
     /// </summary>
     public TimeSpan TotalUsage
     {
-        get =>
-            _storedTotalUsage
-            + (
-                IsActive && _activeSessionStartedAt.HasValue
-                    ? DateTime.Now - _activeSessionStartedAt.Value
-                    : TimeSpan.Zero
-            );
+        get
+        {
+            if (!_sessionStartedAt.HasValue)
+                return _storedTotalUsage;
+
+            var elapsed = DateTime.Now - _sessionStartedAt.Value;
+            return _storedTotalUsage + (elapsed > TimeSpan.Zero ? elapsed : TimeSpan.Zero);
+        }
         set
         {
             _storedTotalUsage = value;
@@ -105,28 +93,22 @@ public class DeviceInfo : ObservableObject
     }
 
     /// <summary>
-    /// Starts tracking the current active session in memory.
+    /// Raw timestamp of the currently active session.
+    /// Set when a ConnectionStarted event is added and cleared on ConnectionEnded.
     /// </summary>
-    public void StartActiveSession(DateTime? sessionStartedAt = null)
+    public DateTime? SessionStartedAt
     {
-        _activeSessionStartedAt = sessionStartedAt ?? DateTime.Now;
-        OnPropertyChanged(nameof(TotalUsage));
-    }
-
-    /// <summary>
-    /// Finishes the current active session and folds it into the persisted usage snapshot.
-    /// </summary>
-    public void EndActiveSession(DateTime? sessionEndedAt = null)
-    {
-        if (_activeSessionStartedAt.HasValue)
+        get => _sessionStartedAt;
+        set
         {
-            var end = sessionEndedAt ?? DateTime.Now;
-            if (end > _activeSessionStartedAt.Value)
-                _storedTotalUsage += end - _activeSessionStartedAt.Value;
-            _activeSessionStartedAt = null;
+            if (_sessionStartedAt != value)
+            {
+                _sessionStartedAt = value;
+                OnPropertyChanged(nameof(SessionStartedAt));
+                OnPropertyChanged(nameof(IsActive));
+                OnPropertyChanged(nameof(TotalUsage));
+            }
         }
-
-        OnPropertyChanged(nameof(TotalUsage));
     }
 
     /// <summary>

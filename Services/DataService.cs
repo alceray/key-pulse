@@ -78,26 +78,22 @@ public class DataService
     /// Recomputes total usage for a device from the event log.
     /// Used for snapshot rebuild/recovery.
     /// </summary>
-    public TimeSpan GetTotalUsage(string deviceId)
+    public TimeSpan ComputeTotalUsage(string deviceId)
     {
         var totalUsage = TimeSpan.Zero;
         DateTime? lastStartTime = null;
         var events = _context.DeviceEvents.Where(e => e.DeviceId == deviceId).OrderBy(e => e.DeviceEventId).ToList();
 
         foreach (var deviceEvent in events)
-            if (deviceEvent.EventType.IsOpening())
+            if (deviceEvent.EventType.IsOpeningEvent())
             {
                 lastStartTime = deviceEvent.Timestamp;
             }
-            else if (deviceEvent.EventType.IsClosing() && lastStartTime.HasValue)
+            else if (deviceEvent.EventType.IsClosingEvent() && lastStartTime.HasValue)
             {
                 totalUsage += deviceEvent.Timestamp - lastStartTime.Value;
                 lastStartTime = null;
             }
-
-        // If currently connected, add the time since the last opening event
-        if (lastStartTime.HasValue)
-            totalUsage += DateTime.Now - lastStartTime.Value;
 
         return totalUsage;
     }
@@ -238,9 +234,9 @@ public class DataService
             var devices = _context.Devices.ToList();
             foreach (var device in devices)
             {
-                device.TotalUsage = GetTotalUsage(device.DeviceId);
+                device.TotalUsage = ComputeTotalUsage(device.DeviceId);
                 device.LastConnectedAt = GetLastConnectedTime(device.DeviceId);
-                device.IsActive = false;
+                device.SessionStartedAt = null;
             }
 
             _context.SaveChanges();

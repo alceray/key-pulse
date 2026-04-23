@@ -15,7 +15,6 @@ public class DeviceListViewModel : ObservableObject, IDisposable
 {
     private readonly UsbMonitorService _usbMonitorService;
     private readonly DispatcherTimer _timer;
-    private readonly DateTime _appSessionStart = DateTime.Now;
 
     public ICollectionView DeviceListCollection { get; }
     public ICommand RenameDeviceCommand { get; }
@@ -77,8 +76,8 @@ public class DeviceListViewModel : ObservableObject, IDisposable
         _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         _timer.Tick += (s, e) =>
         {
-            // Update app session time
-            var elapsed = DateTime.Now - _appSessionStart;
+            // Update app session time from the AppStarted event timestamp.
+            var elapsed = DateTime.Now - _usbMonitorService.AppSessionStartedAt;
             CurrentSessionTime = $"{(int)elapsed.TotalHours:D2}:{elapsed.Minutes:D2}:{elapsed.Seconds:D2}";
 
             // Refresh in-memory dynamic device display values.

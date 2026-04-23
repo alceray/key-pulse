@@ -42,7 +42,7 @@ public enum EventTypes
 public static class EventTypeExtensions
 {
     /// <summary>Opening events indicate a device becoming active/connected.</summary>
-    private static readonly List<EventTypes> _openingEvents =
+    private static readonly List<EventTypes> OpeningEvents =
     [
         EventTypes.ConnectionStarted,
         EventTypes.Connected,
@@ -50,23 +50,32 @@ public static class EventTypeExtensions
     ];
 
     /// <summary>Closing events indicate a device becoming inactive/disconnected.</summary>
-    private static readonly List<EventTypes> _closingEvents =
+    private static readonly List<EventTypes> ClosingEvents =
     [
         EventTypes.ConnectionEnded,
         EventTypes.Disconnected,
         EventTypes.Suspended,
     ];
 
+    /// <summary>App-level events that don't relate to specific devices.</summary>
+    private static readonly List<EventTypes> AppEvents = [EventTypes.AppStarted, EventTypes.AppEnded];
+
     /// <summary>Returns true if this event represents a device becoming active.</summary>
-    public static bool IsOpening(this EventTypes eventType)
+    public static bool IsOpeningEvent(this EventTypes eventType)
     {
-        return _openingEvents.Contains(eventType);
+        return OpeningEvents.Contains(eventType);
     }
 
     /// <summary>Returns true if this event represents a device becoming inactive.</summary>
-    public static bool IsClosing(this EventTypes eventType)
+    public static bool IsClosingEvent(this EventTypes eventType)
     {
-        return _closingEvents.Contains(eventType);
+        return ClosingEvents.Contains(eventType);
+    }
+
+    /// <summary>Returns true if this event is an app-level event (AppStarted or AppEnded).</summary>
+    public static bool IsAppEvent(this EventTypes eventType)
+    {
+        return AppEvents.Contains(eventType);
     }
 }
 
