@@ -23,7 +23,7 @@ public class UsbMonitorService : IDisposable
     // recently inserted devices helps to prevent inserting duplicate connected events in the db.
     private readonly ConcurrentDictionary<
         string,
-        (int KeyboardCount, int MouseCount, DateTime FirstTimestamp)
+        (int KeyboardSignals, int MouseSignals, DateTime FirstTimestamp)
     > _recentlyInsertedDevices = new();
 
     private readonly string _unknownDeviceName = "Unknown Device";
@@ -119,24 +119,25 @@ public class UsbMonitorService : IDisposable
             if (string.IsNullOrEmpty(deviceId))
                 return;
 
-            var keyboardIncrement = instance.GetPropertyValue("PNPClass")?.ToString() == "Keyboard" ? 1 : 0;
-            var mouseIncrement = instance.GetPropertyValue("PNPClass")?.ToString() == "Mouse" ? 1 : 0;
+            var signalType = UsbDeviceClassifier.GetInterfaceSignal(instance);
+            var keyboardIncrement = signalType == DeviceTypes.Keyboard ? 1 : 0;
+            var mouseIncrement = signalType == DeviceTypes.Mouse ? 1 : 0;
 
             if (_recentlyInsertedDevices.TryGetValue(deviceId, out var value))
             {
-                var (keyboardCount, mouseCount, firstTimestamp) = value;
-                keyboardCount += keyboardIncrement;
-                mouseCount += mouseIncrement;
-                _recentlyInsertedDevices[deviceId] = (keyboardCount, mouseCount, firstTimestamp);
+                var (keyboardSignals, mouseSignals, firstTimestamp) = value;
+                keyboardSignals += keyboardIncrement;
+                mouseSignals += mouseIncrement;
+                _recentlyInsertedDevices[deviceId] = (keyboardSignals, mouseSignals, firstTimestamp);
 
-                // wait until we have at least 2 events to determine the device type and save the device to db
-                if (keyboardCount + mouseCount < 2)
+                // wait until we have at least 2 signals to determine device type
+                if (keyboardSignals + mouseSignals < 2)
                     return;
 
-                //Debug.WriteLine($"Inserted device {deviceId}: {keyboardCount} {mouseCount}");
-
-                var deviceType = keyboardCount > mouseCount ? DeviceTypes.Keyboard : DeviceTypes.Mouse;
                 var device = _dataService.GetDevice(deviceId);
+                var existingType = device?.DeviceType ?? DeviceTypes.Unknown;
+                var deviceType = UsbDeviceClassifier.ResolveDeviceType(keyboardSignals, mouseSignals, existingType);
+
                 if (device == null)
                 {
                     var deviceName = PowershellScripts.GetDeviceName(deviceId) ?? _unknownDeviceName;
@@ -299,31 +300,31 @@ public class UsbMonitorService : IDisposable
                 devicesById[deviceId].Add(obj);
             }
 
-            foreach (var kvp in devicesById)
+            foreach (var (deviceId, objects) in devicesById)
             {
-                var deviceId = kvp.Key;
-                var objects = kvp.Value;
-                var keyboardCount = objects.Count(obj => obj.GetPropertyValue("PNPClass")?.ToString() == "Keyboard");
-                var mouseCount = objects.Count(obj => obj.GetPropertyValue("PNPClass")?.ToString() == "Mouse");
-                var deviceType = keyboardCount > mouseCount ? DeviceTypes.Keyboard : DeviceTypes.Mouse;
+                var keyboardSignals = objects.Count(obj =>
+                    UsbDeviceClassifier.GetInterfaceSignal(obj) == DeviceTypes.Keyboard
+                );
+                var mouseSignals = objects.Count(obj =>
+                    UsbDeviceClassifier.GetInterfaceSignal(obj) == DeviceTypes.Mouse
+                );
 
-                //Debug.WriteLine($"Counts: {deviceId} {keyboardCount} {mouseCount}");
-
-                DeviceInfo? currDevice = null;
-                if (DeviceList.Any(d => d.DeviceId == deviceId))
+                var currDevice = DeviceList.FirstOrDefault(d => d.DeviceId == deviceId);
+                if (currDevice != null)
                 {
-                    currDevice = DeviceList.First(d => d.DeviceId == deviceId);
-                    if (currDevice.DeviceType == DeviceTypes.Unknown)
-                        currDevice.DeviceType = deviceType;
+                    currDevice.DeviceType = UsbDeviceClassifier.ResolveDeviceType(
+                        keyboardSignals,
+                        mouseSignals,
+                        currDevice.DeviceType
+                    );
                 }
                 else
                 {
-                    var deviceName = PowershellScripts.GetDeviceName(deviceId) ?? _unknownDeviceName;
                     currDevice = new DeviceInfo
                     {
                         DeviceId = deviceId,
-                        DeviceName = deviceName,
-                        DeviceType = deviceType,
+                        DeviceName = PowershellScripts.GetDeviceName(deviceId) ?? _unknownDeviceName,
+                        DeviceType = UsbDeviceClassifier.ResolveDeviceType(keyboardSignals, mouseSignals),
                     };
                 }
 
