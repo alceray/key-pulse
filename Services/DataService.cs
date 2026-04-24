@@ -20,6 +20,7 @@ public class DataService
     {
         using var ctx = _factory.CreateDbContext();
         ctx.Database.Migrate();
+        ctx.Database.ExecuteSqlRaw("PRAGMA journal_mode=WAL;");
     }
 
     public Device? GetDevice(string deviceId)

@@ -23,7 +23,7 @@ public class ApplicationDbContext : DbContext
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
-        optionsBuilder.UseLazyLoadingProxies().UseSqlite($"Data Source={GetDatabasePath()};Journal Mode=WAL");
+        optionsBuilder.UseLazyLoadingProxies().UseSqlite($"Data Source={GetDatabasePath()}");
     }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
