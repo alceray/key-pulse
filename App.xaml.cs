@@ -18,6 +18,7 @@ namespace KeyPulse;
 public partial class App : System.Windows.Application
 {
     private UsbMonitorService? _usbMonitorService;
+    private RawInputService? _rawInputService;
     private static Mutex? _appMutex;
     private NotifyIcon? _trayIcon;
     private string? _appName;
@@ -31,11 +32,13 @@ public partial class App : System.Windows.Application
         AppDomain.CurrentDomain.UnhandledException += (s, args) =>
         {
             Debug.WriteLine($"Unhandled exception: {args.ExceptionObject}");
+            _rawInputService?.Dispose();
             _usbMonitorService?.Dispose();
         };
         DispatcherUnhandledException += (s, args) =>
         {
             Debug.WriteLine($"Dispatcher unhandled exception: {args.Exception}");
+            _rawInputService?.Dispose();
             _usbMonitorService?.Dispose();
         };
         _appName = Assembly.GetExecutingAssembly().GetName().Name ?? "KeyPulse";
@@ -55,6 +58,8 @@ public partial class App : System.Windows.Application
         ConfigureServices(services);
         ServiceProvider = services.BuildServiceProvider();
         _usbMonitorService = ServiceProvider.GetRequiredService<UsbMonitorService>();
+        _rawInputService = ServiceProvider.GetRequiredService<RawInputService>();
+        _rawInputService.Start();
 
         RunInBackground =
             bool.TryParse(Environment.GetEnvironmentVariable("KEYPULSE_RUN_IN_BACKGROUND"), out var result) && result;
@@ -79,6 +84,7 @@ public partial class App : System.Windows.Application
             _appMutex?.ReleaseMutex();
             _appMutex?.Dispose();
             _trayIcon?.Dispose();
+            _rawInputService?.Dispose();
             _usbMonitorService?.Dispose();
             ServiceProvider?.Dispose();
         }
@@ -97,6 +103,7 @@ public partial class App : System.Windows.Application
         services.AddDbContext<ApplicationDbContext>();
         services.AddScoped<DataService>();
         services.AddSingleton<UsbMonitorService>();
+        services.AddSingleton<RawInputService>();
         services.AddTransient<DeviceListViewModel>();
         services.AddTransient<EventLogViewModel>();
     }

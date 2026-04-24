@@ -9,6 +9,7 @@ public class ApplicationDbContext : DbContext
 {
     public DbSet<Device> Devices { get; set; }
     public DbSet<DeviceEvent> DeviceEvents { get; set; }
+    public DbSet<ActivitySnapshot> ActivitySnapshots { get; set; }
 
     private static string GetDatabasePath()
     {
@@ -58,5 +59,15 @@ public class ApplicationDbContext : DbContext
             })
             .IsUnique()
             .HasDatabaseName("Idx_DeviceEvents_Unique");
+
+        modelBuilder.Entity<ActivitySnapshot>().ToTable("ActivitySnapshots");
+
+        modelBuilder
+            .Entity<ActivitySnapshot>()
+            .HasIndex(e => new { e.DeviceId, e.Minute })
+            .HasDatabaseName("Idx_ActivitySnapshots_DeviceIdMinute")
+            .IsUnique();
+
+        modelBuilder.Entity<ActivitySnapshot>().HasIndex(e => e.Minute).HasDatabaseName("Idx_ActivitySnapshots_Minute");
     }
 }

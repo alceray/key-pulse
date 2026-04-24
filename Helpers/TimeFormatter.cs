@@ -90,4 +90,12 @@ public static class TimeFormatter
 
         return string.Join(" ", parts.Take(3));
     }
+
+    /// <summary>
+    /// Truncates a DateTime to the start of its minute (zeroes out seconds, milliseconds, ticks).
+    /// </summary>
+    public static DateTime TruncateToMinute(this DateTime dt)
+    {
+        return new DateTime(dt.Year, dt.Month, dt.Day, dt.Hour, dt.Minute, 0, dt.Kind);
+    }
 }

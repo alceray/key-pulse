@@ -112,6 +112,37 @@ public class DataService
         }
     }
 
+    public void SaveActivitySnapshots(IEnumerable<ActivitySnapshot> snapshots)
+    {
+        try
+        {
+            _context.ActivitySnapshots.AddRange(snapshots);
+            _context.SaveChanges();
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"ERROR in SaveActivitySnapshots: {ex.Message}");
+        }
+    }
+
+    public IReadOnlyCollection<ActivitySnapshot> GetActivitySnapshots(
+        string? deviceId = null,
+        DateTime? from = null,
+        DateTime? to = null
+    )
+    {
+        var query = _context.ActivitySnapshots.AsQueryable();
+
+        if (!string.IsNullOrWhiteSpace(deviceId))
+            query = query.Where(s => s.DeviceId == deviceId);
+        if (from.HasValue)
+            query = query.Where(s => s.Minute >= from.Value);
+        if (to.HasValue)
+            query = query.Where(s => s.Minute <= to.Value);
+
+        return query.OrderBy(s => s.Minute).ToList().AsReadOnly();
+    }
+
     /// <summary>
     /// Recomputes total usage for a device from the event log.
     /// Used for snapshot rebuild/recovery.
