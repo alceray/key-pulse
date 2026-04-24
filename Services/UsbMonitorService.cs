@@ -56,21 +56,6 @@ public class UsbMonitorService : IDisposable
         StartMonitoring();
     }
 
-    private static void PrintObject(ManagementBaseObject obj)
-    {
-        if (obj == null)
-            return;
-
-        Debug.WriteLine("OBJECT PROPERTIES");
-        foreach (var property in obj.Properties)
-        {
-            var name = property.Name;
-            var value = property.Value;
-            if (!string.IsNullOrEmpty(name) && !string.IsNullOrEmpty(value?.ToString()))
-                Debug.WriteLine($"{name}: {value}");
-        }
-    }
-
     private ObservableCollection<Device> GetAllDevices()
     {
         var devices = _dataService.GetAllDevices();
@@ -154,9 +139,22 @@ public class UsbMonitorService : IDisposable
 
             _cachedDevices[deviceId] = (keyboardSignals, mouseSignals, firstTimestamp);
 
-            // wait until we have at least 2 signals to determine device type
-            if (keyboardSignals + mouseSignals < 2)
+            Task.Delay(SignalAggregationWindow).ContinueWith(_ => ProcessCachedDevice(deviceId));
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"ERROR in DeviceInsertedEvent: {ex.Message}");
+        }
+    }
+
+    private void ProcessCachedDevice(string deviceId)
+    {
+        try
+        {
+            if (!_cachedDevices.TryGetValue(deviceId, out var cached))
                 return;
+
+            var (keyboardSignals, mouseSignals, firstTimestamp) = cached;
 
             var device = _dataService.GetDevice(deviceId);
             var existingType = device?.DeviceType ?? DeviceTypes.Unknown;
@@ -184,7 +182,7 @@ public class UsbMonitorService : IDisposable
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"ERROR in DeviceInsertedEvent: {ex.Message}");
+            Debug.WriteLine($"ERROR in ProcessCachedDevice: {ex.Message}");
         }
     }
 
