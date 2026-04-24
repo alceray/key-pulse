@@ -99,11 +99,12 @@ public class UsbMonitorService : IDisposable
         if (deviceEvent.EventType.IsOpeningEvent())
         {
             device.SessionStartedAt = deviceEvent.Timestamp;
-            device.LastConnectedAt ??= deviceEvent.Timestamp;
+            if (!device.LastConnectedAt.HasValue || deviceEvent.EventType == EventTypes.Connected)
+                device.LastConnectedAt = deviceEvent.Timestamp;
         }
         else if (deviceEvent.EventType.IsClosingEvent())
         {
-            device.SessionStartedAt = null;
+            device.CommitSessionUsage(deviceEvent.Timestamp);
         }
 
         _dataService.SaveDevice(device);
@@ -185,17 +186,14 @@ public class UsbMonitorService : IDisposable
                 return;
             _recentlyInsertedDevices.TryRemove(deviceId, out _);
 
-            var device = _dataService.GetDevice(deviceId) ?? throw new Exception($"Removed device does not exist");
-            if (device.IsActive)
+            var device = _dataService.GetDevice(deviceId) ?? throw new Exception("Removed device does not exist");
+            var disconnectedEvent = new DeviceEvent
             {
-                var disconnectedEvent = new DeviceEvent
-                {
-                    DeviceId = device.DeviceId,
-                    EventType = EventTypes.Disconnected,
-                    Timestamp = DateTime.Now,
-                };
-                AddDeviceEvent(disconnectedEvent, device);
-            }
+                DeviceId = device.DeviceId,
+                EventType = EventTypes.Disconnected,
+                Timestamp = DateTime.Now,
+            };
+            AddDeviceEvent(disconnectedEvent, device);
         }
         catch (Exception ex)
         {

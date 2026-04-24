@@ -137,6 +137,22 @@ public class DeviceInfo : ObservableObject
         LastConnectedAt.HasValue ? TimeFormatter.ToRelativeTime(LastConnectedAt.Value) : "N/A";
 
     /// <summary>
+    /// Commits elapsed time from the active session into stored usage,
+    /// then marks the device as inactive.
+    /// </summary>
+    public void CommitSessionUsage(DateTime endTime)
+    {
+        if (!_sessionStartedAt.HasValue)
+            return;
+
+        var elapsed = endTime - _sessionStartedAt.Value;
+        if (elapsed > TimeSpan.Zero)
+            _storedTotalUsage += elapsed;
+
+        SessionStartedAt = null;
+    }
+
+    /// <summary>
     /// Refreshes dynamic display-only properties that depend on the current time.
     /// </summary>
     public void RefreshDynamicProperties()
