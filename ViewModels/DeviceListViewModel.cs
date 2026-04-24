@@ -64,7 +64,7 @@ public class DeviceListViewModel : ObservableObject, IDisposable
         _usbMonitorService = usbMonitorService;
 
         DeviceListCollection = CollectionViewSource.GetDefaultView(_usbMonitorService.DeviceList);
-        DeviceListCollection.Filter = device => ShowAllDevices || ((DeviceInfo)device).IsActive;
+        DeviceListCollection.Filter = device => ShowAllDevices || ((Device)device).IsActive;
 
         foreach (var device in _usbMonitorService.DeviceList)
             device.PropertyChanged += Device_PropertyChanged;
@@ -89,7 +89,7 @@ public class DeviceListViewModel : ObservableObject, IDisposable
 
     private void Device_PropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(DeviceInfo.IsActive))
+        if (e.PropertyName == nameof(Device.IsActive))
             Application.Current.Dispatcher.BeginInvoke(() =>
             {
                 DeviceListCollection.Refresh();
@@ -100,11 +100,11 @@ public class DeviceListViewModel : ObservableObject, IDisposable
     private void DeviceList_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
         if (e.NewItems != null)
-            foreach (DeviceInfo device in e.NewItems)
+            foreach (Device device in e.NewItems)
                 device.PropertyChanged += Device_PropertyChanged;
 
         if (e.OldItems != null)
-            foreach (DeviceInfo device in e.OldItems)
+            foreach (Device device in e.OldItems)
                 device.PropertyChanged -= Device_PropertyChanged;
 
         Application.Current.Dispatcher.BeginInvoke(() =>
@@ -116,7 +116,7 @@ public class DeviceListViewModel : ObservableObject, IDisposable
 
     private void ExecuteRenameDevice(object parameter)
     {
-        if (parameter is DeviceInfo device)
+        if (parameter is Device device)
         {
             var newName = PromptForDeviceName(device.DeviceName);
             if (!string.IsNullOrWhiteSpace(newName))
@@ -129,7 +129,7 @@ public class DeviceListViewModel : ObservableObject, IDisposable
 
     private bool CanExecuteRenameDevice(object parameter)
     {
-        return parameter is DeviceInfo;
+        return parameter is Device;
     }
 
     private static string PromptForDeviceName(string currentName)

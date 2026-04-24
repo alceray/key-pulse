@@ -13,17 +13,18 @@ public class UsbMonitorService : IDisposable
     private ManagementEventWatcher? _insertWatcher;
     private ManagementEventWatcher? _removeWatcher;
 
-    public ObservableCollection<DeviceInfo> DeviceList;
+    public ObservableCollection<Device> DeviceList;
     public ObservableCollection<DeviceEvent> DeviceEventList;
     public DateTime AppSessionStartedAt { get; private set; }
 
-    // for every irl connection, 2-3 insert events are created within a very short timeframe, so this cache of
-    // recently inserted devices helps to prevent inserting duplicate connected events in the db.
+    // on every irl connection, 2-3 events are created within a short timeframe, so this cache of recent devices
+    // prevents inserting duplicate events in the db.
     private readonly ConcurrentDictionary<
         string,
         (int KeyboardSignals, int MouseSignals, DateTime FirstTimestamp)
-    > _recentlyInsertedDevices = new();
+    > _cachedDevices = new();
 
+    private static readonly TimeSpan SignalAggregationWindow = TimeSpan.FromSeconds(1);
     private readonly string _unknownDeviceName = "Unknown Device";
     private bool _disposed = false;
     private readonly DataService _dataService;
@@ -70,19 +71,19 @@ public class UsbMonitorService : IDisposable
         }
     }
 
-    private ObservableCollection<DeviceInfo> GetAllDevices()
+    private ObservableCollection<Device> GetAllDevices()
     {
         var devices = _dataService.GetAllDevices();
         foreach (var device in devices)
             device.PropertyChanged += Device_PropertyChanged;
 
-        return new ObservableCollection<DeviceInfo>(devices);
+        return new ObservableCollection<Device>(devices);
     }
 
-    private void AddDeviceEvent(DeviceEvent deviceEvent, DeviceInfo? device = null)
+    private void AddDeviceEvent(DeviceEvent deviceEvent, Device? device = null)
     {
         Application.Current.Dispatcher.BeginInvoke(() => DeviceEventList.Add(deviceEvent));
-        _dataService.AddDeviceEvent(deviceEvent);
+        _dataService.SaveDeviceEvent(deviceEvent);
 
         // Skip device operations for app-level events
         if (deviceEvent.EventType.IsAppEvent() || device == null)
@@ -99,8 +100,11 @@ public class UsbMonitorService : IDisposable
         if (deviceEvent.EventType.IsOpeningEvent())
         {
             device.SessionStartedAt = deviceEvent.Timestamp;
-            if (!device.LastConnectedAt.HasValue || deviceEvent.EventType == EventTypes.Connected)
-                device.LastConnectedAt = deviceEvent.Timestamp;
+            device.UpdateLastConnectedAt(
+                deviceEvent.Timestamp,
+                deviceEvent.EventType,
+                _dataService.GetEventsFromLastCompletedSession()
+            );
         }
         else if (deviceEvent.EventType.IsClosingEvent())
         {
@@ -128,44 +132,55 @@ public class UsbMonitorService : IDisposable
             var keyboardIncrement = signalType == DeviceTypes.Keyboard ? 1 : 0;
             var mouseIncrement = signalType == DeviceTypes.Mouse ? 1 : 0;
 
-            if (_recentlyInsertedDevices.TryGetValue(deviceId, out var value))
+            int keyboardSignals;
+            int mouseSignals;
+            DateTime firstTimestamp;
+
+            if (
+                _cachedDevices.TryGetValue(deviceId, out var value)
+                && DateTime.Now - value.FirstTimestamp <= SignalAggregationWindow
+            )
             {
-                var (keyboardSignals, mouseSignals, firstTimestamp) = value;
-                keyboardSignals += keyboardIncrement;
-                mouseSignals += mouseIncrement;
-                _recentlyInsertedDevices[deviceId] = (keyboardSignals, mouseSignals, firstTimestamp);
-
-                // wait until we have at least 2 signals to determine device type
-                if (keyboardSignals + mouseSignals < 2)
-                    return;
-
-                var device = _dataService.GetDevice(deviceId);
-                var existingType = device?.DeviceType ?? DeviceTypes.Unknown;
-                var deviceType = UsbDeviceClassifier.ResolveDeviceType(keyboardSignals, mouseSignals, existingType);
-
-                if (device == null)
-                {
-                    var deviceName = PowershellScripts.GetDeviceName(deviceId) ?? _unknownDeviceName;
-                    device = new DeviceInfo
-                    {
-                        DeviceId = deviceId,
-                        DeviceType = deviceType,
-                        DeviceName = deviceName,
-                    };
-                }
-
-                var connectedEvent = new DeviceEvent
-                {
-                    Timestamp = firstTimestamp,
-                    DeviceId = deviceId,
-                    EventType = EventTypes.Connected,
-                };
-                AddDeviceEvent(connectedEvent, device);
+                keyboardSignals = value.KeyboardSignals + keyboardIncrement;
+                mouseSignals = value.MouseSignals + mouseIncrement;
+                firstTimestamp = value.FirstTimestamp;
             }
             else
             {
-                _recentlyInsertedDevices[deviceId] = (keyboardIncrement, mouseIncrement, DateTime.Now);
+                keyboardSignals = keyboardIncrement;
+                mouseSignals = mouseIncrement;
+                firstTimestamp = DateTime.Now;
             }
+
+            _cachedDevices[deviceId] = (keyboardSignals, mouseSignals, firstTimestamp);
+
+            // wait until we have at least 2 signals to determine device type
+            if (keyboardSignals + mouseSignals < 2)
+                return;
+
+            var device = _dataService.GetDevice(deviceId);
+            var existingType = device?.DeviceType ?? DeviceTypes.Unknown;
+            var deviceType = UsbDeviceClassifier.ResolveDeviceType(keyboardSignals, mouseSignals, existingType);
+
+            if (device == null)
+            {
+                var deviceName = PowershellScripts.GetDeviceName(deviceId) ?? _unknownDeviceName;
+                device = new Device
+                {
+                    DeviceId = deviceId,
+                    DeviceType = deviceType,
+                    DeviceName = deviceName,
+                };
+            }
+
+            var connectedEvent = new DeviceEvent
+            {
+                Timestamp = firstTimestamp,
+                DeviceId = deviceId,
+                EventType = EventTypes.Connected,
+            };
+            AddDeviceEvent(connectedEvent, device);
+            _cachedDevices.TryRemove(deviceId, out _);
         }
         catch (Exception ex)
         {
@@ -184,7 +199,10 @@ public class UsbMonitorService : IDisposable
             var deviceId = ExtractDeviceId(instance);
             if (string.IsNullOrEmpty(deviceId))
                 return;
-            _recentlyInsertedDevices.TryRemove(deviceId, out _);
+
+            var latestDeviceEvent = _dataService.GetLastDeviceEvent(deviceId);
+            if (latestDeviceEvent?.EventType == EventTypes.Disconnected)
+                return;
 
             var device = _dataService.GetDevice(deviceId) ?? throw new Exception("Removed device does not exist");
             var disconnectedEvent = new DeviceEvent
@@ -237,8 +255,8 @@ public class UsbMonitorService : IDisposable
 
     private void Device_PropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
-        if (sender is DeviceInfo device)
-            if (e.PropertyName == nameof(DeviceInfo.DeviceName))
+        if (sender is Device device)
+            if (e.PropertyName == nameof(Device.DeviceName))
                 _dataService.SaveDevice(device);
     }
 
@@ -319,7 +337,7 @@ public class UsbMonitorService : IDisposable
                         currDevice.DeviceType
                     );
                 else
-                    currDevice = new DeviceInfo
+                    currDevice = new Device
                     {
                         DeviceId = deviceId,
                         DeviceName = PowershellScripts.GetDeviceName(deviceId) ?? _unknownDeviceName,

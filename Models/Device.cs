@@ -27,7 +27,7 @@ public enum DeviceTypes
 /// Tracks device metadata, connection status, and usage statistics.
 /// </summary>
 [Table("Devices")]
-public class DeviceInfo : ObservableObject
+public class Device : ObservableObject
 {
     private string _deviceName = "Unknown Device";
     private TimeSpan _storedTotalUsage = TimeSpan.Zero;
@@ -135,6 +135,31 @@ public class DeviceInfo : ObservableObject
     [NotMapped]
     public string LastConnectedRelative =>
         LastConnectedAt.HasValue ? TimeFormatter.ToRelativeTime(LastConnectedAt.Value) : "N/A";
+
+    /// <summary>
+    /// Updates LastConnectedAt using event-aware rules:
+    /// - always set on first known connection or Connected events
+    /// - for ConnectionStarted, set only when the last completed session's
+    ///   non-app events contain no ConnectionEnded for this device.
+    /// </summary>
+    public void UpdateLastConnectedAt(DateTime startTime, EventTypes eventType, IEnumerable<DeviceEvent> events)
+    {
+        if (!_lastConnectedAt.HasValue || eventType == EventTypes.Connected)
+        {
+            LastConnectedAt = startTime;
+            return;
+        }
+
+        if (eventType != EventTypes.ConnectionStarted)
+            return;
+
+        var hasConnectionEndedInLastSession = events.Any(e =>
+            e.DeviceId == DeviceId && e.EventType == EventTypes.ConnectionEnded
+        );
+
+        if (!hasConnectionEndedInLastSession)
+            LastConnectedAt = startTime;
+    }
 
     /// <summary>
     /// Commits elapsed time from the active session into stored usage,

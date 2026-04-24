@@ -7,7 +7,7 @@ namespace KeyPulse.Data;
 
 public class ApplicationDbContext : DbContext
 {
-    public DbSet<DeviceInfo> Devices { get; set; }
+    public DbSet<Device> Devices { get; set; }
     public DbSet<DeviceEvent> DeviceEvents { get; set; }
 
     private static string GetDatabasePath()
@@ -30,7 +30,7 @@ public class ApplicationDbContext : DbContext
         base.OnModelCreating(modelBuilder);
 
         modelBuilder
-            .Entity<DeviceInfo>()
+            .Entity<Device>()
             .ToTable("Devices")
             .HasIndex(e => e.DeviceId)
             .HasDatabaseName("Idx_Devices_DeviceId");

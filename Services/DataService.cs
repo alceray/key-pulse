@@ -21,17 +21,17 @@ public class DataService
         _context.Database.Migrate();
     }
 
-    public DeviceInfo? GetDevice(string deviceId)
+    public Device? GetDevice(string deviceId)
     {
         return _context.Devices.Find(deviceId);
     }
 
-    public IReadOnlyCollection<DeviceInfo> GetAllDevices()
+    public IReadOnlyCollection<Device> GetAllDevices()
     {
         return _context.Devices.ToList().AsReadOnly();
     }
 
-    public void SaveDevice(DeviceInfo device)
+    public void SaveDevice(Device device)
     {
         try
         {
@@ -58,7 +58,44 @@ public class DataService
         return _context.DeviceEvents.ToList().AsReadOnly();
     }
 
-    public void AddDeviceEvent(DeviceEvent deviceEvent)
+    public DeviceEvent? GetLastDeviceEvent(string? deviceId = null)
+    {
+        var query = _context.DeviceEvents.AsQueryable();
+
+        if (!string.IsNullOrWhiteSpace(deviceId))
+            query = query.Where(e => e.DeviceId == deviceId);
+
+        return query.OrderByDescending(e => e.DeviceEventId).FirstOrDefault();
+    }
+
+    public IReadOnlyCollection<DeviceEvent> GetEventsFromLastCompletedSession()
+    {
+        var lastAppEnded = _context
+            .DeviceEvents.Where(e => e.EventType == EventTypes.AppEnded)
+            .OrderByDescending(e => e.DeviceEventId)
+            .Select(e => (int?)e.DeviceEventId)
+            .FirstOrDefault();
+
+        if (!lastAppEnded.HasValue)
+            return [];
+
+        var lastAppStarted = _context
+            .DeviceEvents.Where(e => e.EventType == EventTypes.AppStarted && e.DeviceEventId < lastAppEnded.Value)
+            .OrderByDescending(e => e.DeviceEventId)
+            .Select(e => (int?)e.DeviceEventId)
+            .FirstOrDefault();
+
+        if (!lastAppStarted.HasValue)
+            return [];
+
+        return _context
+            .DeviceEvents.Where(e => e.DeviceEventId > lastAppStarted.Value && e.DeviceEventId < lastAppEnded.Value)
+            .OrderBy(e => e.DeviceEventId)
+            .ToList()
+            .AsReadOnly();
+    }
+
+    public void SaveDeviceEvent(DeviceEvent deviceEvent)
     {
         try
         {
@@ -79,7 +116,7 @@ public class DataService
     /// Recomputes total usage for a device from the event log.
     /// Used for snapshot rebuild/recovery.
     /// </summary>
-    public TimeSpan ComputeTotalUsage(string deviceId)
+    private TimeSpan ComputeTotalUsage(string deviceId)
     {
         var totalUsage = TimeSpan.Zero;
         DateTime? lastStartTime = null;
@@ -97,63 +134,6 @@ public class DataService
             }
 
         return totalUsage;
-    }
-
-    /// <summary>
-    /// Gets the last time a device was connected.
-    /// Checks both runtime Connected events and startup ConnectionStarted events
-    /// (where the device was already plugged in before the app started),
-    /// and returns the more recent of the two.
-    /// </summary>
-    public DateTime? GetLastConnectedTime(string deviceId)
-    {
-        var lastConnected = _context
-            .DeviceEvents.Where(e => e.DeviceId == deviceId && e.EventType == EventTypes.Connected)
-            .OrderByDescending(e => e.DeviceEventId)
-            .Select(e => (DateTime?)e.Timestamp)
-            .FirstOrDefault();
-
-        // Find the most recent ConnectionStarted where the device had no ConnectionEnded
-        // in the previous session — meaning it was already plugged in before that startup.
-        var lastConnectionStarted = (
-            from cs in _context.DeviceEvents
-            where cs.DeviceId == deviceId && cs.EventType == EventTypes.ConnectionStarted
-
-            // This session's AppStarted ID
-            let sessionStartId = _context
-                .DeviceEvents.Where(a => a.EventType == EventTypes.AppStarted && a.DeviceEventId <= cs.DeviceEventId)
-                .Max(a => (int?)a.DeviceEventId)
-            where sessionStartId != null
-
-            // Previous session's AppEnded ID
-            let prevEndId = _context
-                .DeviceEvents.Where(a => a.EventType == EventTypes.AppEnded && a.DeviceEventId < sessionStartId)
-                .Max(a => (int?)a.DeviceEventId)
-            where prevEndId != null
-
-            // Previous session's AppStarted ID (null = no earlier session, check from beginning)
-            let prevStartId = _context
-                .DeviceEvents.Where(a => a.EventType == EventTypes.AppStarted && a.DeviceEventId < prevEndId)
-                .Max(a => (int?)a.DeviceEventId)
-
-            // Qualifies only if device connection was not ended in the previous session
-            where
-                !_context.DeviceEvents.Any(d =>
-                    d.DeviceId == deviceId
-                    && d.EventType == EventTypes.ConnectionEnded
-                    && d.DeviceEventId <= prevEndId
-                    && (prevStartId == null || d.DeviceEventId >= prevStartId)
-                )
-            orderby cs.DeviceEventId descending
-            select (DateTime?)cs.Timestamp
-        ).FirstOrDefault();
-
-        // Get earliest ConnectionStarted if not already set
-        lastConnectionStarted ??= _context
-            .DeviceEvents.Where(e => e.DeviceId == deviceId && e.EventType == EventTypes.ConnectionStarted)
-            .Min(e => (DateTime?)e.Timestamp);
-
-        return lastConnected > lastConnectionStarted ? lastConnected : lastConnectionStarted;
     }
 
     /// <summary>
@@ -181,36 +161,28 @@ public class DataService
                 ? heartbeatTime.Value
                 : orphanedSessionStart;
 
-        // Write ConnectionEnded for any devices that were still active in that session
-        var orphanedActiveDevices = _context
-            .DeviceEvents.Where(e =>
-                e.DeviceId != ""
-                && (e.EventType == EventTypes.ConnectionStarted || e.EventType == EventTypes.Connected)
-                && e.Timestamp >= orphanedSessionStart
-            )
-            .Select(e => e.DeviceId)
-            .Distinct()
+        // Backfill ConnectionEnded for devices that have more opening than closing events in the orphaned session.
+        var orphanedSessionDeviceEvents = _context
+            .DeviceEvents.Where(e => e.DeviceId != "" && e.Timestamp >= orphanedSessionStart)
             .ToList();
 
-        foreach (var deviceId in orphanedActiveDevices)
-        {
-            // Only add ConnectionEnded if it wasn't already closed in that session
-            var wasClosedInSession = _context.DeviceEvents.Any(e =>
-                e.DeviceId == deviceId
-                && (e.EventType == EventTypes.ConnectionEnded || e.EventType == EventTypes.Disconnected)
-                && e.Timestamp >= orphanedSessionStart
-            );
+        var unbalancedDeviceIds = orphanedSessionDeviceEvents
+            .GroupBy(e => e.DeviceId)
+            .Where(group =>
+                group.Count(e => e.EventType.IsOpeningEvent()) > group.Count(e => e.EventType.IsClosingEvent())
+            )
+            .Select(group => group.Key)
+            .ToList();
 
-            if (!wasClosedInSession)
-                _context.DeviceEvents.Add(
-                    new DeviceEvent
-                    {
-                        DeviceId = deviceId,
-                        EventType = EventTypes.ConnectionEnded,
-                        Timestamp = crashTime,
-                    }
-                );
-        }
+        foreach (var deviceId in unbalancedDeviceIds)
+            _context.DeviceEvents.Add(
+                new DeviceEvent
+                {
+                    DeviceId = deviceId,
+                    EventType = EventTypes.ConnectionEnded,
+                    Timestamp = crashTime,
+                }
+            );
 
         _context.DeviceEvents.Add(new DeviceEvent { EventType = EventTypes.AppEnded, Timestamp = crashTime });
 
@@ -230,7 +202,6 @@ public class DataService
             foreach (var device in devices)
             {
                 device.TotalUsage = ComputeTotalUsage(device.DeviceId);
-                device.LastConnectedAt = GetLastConnectedTime(device.DeviceId);
                 device.SessionStartedAt = null;
             }
 
