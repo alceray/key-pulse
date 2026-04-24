@@ -35,6 +35,8 @@ public class ApplicationDbContext : DbContext
             .HasIndex(e => e.DeviceId)
             .HasDatabaseName("Idx_Devices_DeviceId");
 
+        modelBuilder.Entity<Device>().Property(e => e.DeviceType).HasConversion<string>();
+
         modelBuilder.Entity<DeviceEvent>().ToTable("DeviceEvents");
 
         modelBuilder.Entity<DeviceEvent>().Property(e => e.EventType).HasConversion<string>();
