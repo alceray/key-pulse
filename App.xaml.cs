@@ -25,7 +25,7 @@ public partial class App : System.Windows.Application
     private static bool RunInBackground { get; set; }
     public static ServiceProvider ServiceProvider { get; private set; } = null!;
 
-    protected override void OnStartup(StartupEventArgs e)
+    protected override async void OnStartup(StartupEventArgs e)
     {
         // Attempt clean shutdown on unhandled exceptions (crashes).
         // Force-kills (IDE stop, TerminateProcess) cannot be caught — RecoverFromCrash() handles those.
@@ -41,6 +41,7 @@ public partial class App : System.Windows.Application
             _rawInputService?.Dispose();
             _usbMonitorService?.Dispose();
         };
+
         _appName = Assembly.GetExecutingAssembly().GetName().Name ?? "KeyPulse";
         _appMutex = new Mutex(true, _appName, out var canCreateApp);
         if (!canCreateApp)
@@ -54,25 +55,31 @@ public partial class App : System.Windows.Application
             Environment.Exit(0);
         }
 
+        // Resolve RunInBackground before services start so the value is stable.
+        RunInBackground =
+            bool.TryParse(Environment.GetEnvironmentVariable("KEYPULSE_RUN_IN_BACKGROUND"), out var result) && result;
+
         var services = new ServiceCollection();
         ConfigureServices(services);
         ServiceProvider = services.BuildServiceProvider();
-        _usbMonitorService = ServiceProvider.GetRequiredService<UsbMonitorService>();
-        _rawInputService = ServiceProvider.GetRequiredService<RawInputService>();
-        _rawInputService.Start();
 
-        RunInBackground =
-            bool.TryParse(Environment.GetEnvironmentVariable("KEYPULSE_RUN_IN_BACKGROUND"), out var result) && result;
+        _usbMonitorService = ServiceProvider.GetRequiredService<UsbMonitorService>();
+
+        // Show window / tray immediately so the UI appears while slow startup runs in the background.
         if (RunInBackground)
-        {
             InitializeTrayIcon();
-        }
         else
         {
             MainWindow = new MainWindow();
             MainWindow.Closing += MainWindow_Closing;
             MainWindow.Show();
         }
+
+        // WMI device snapshot + watcher setup — awaited off the UI thread.
+        await _usbMonitorService.StartAsync();
+
+        _rawInputService = ServiceProvider.GetRequiredService<RawInputService>();
+        _rawInputService.Start();
 
         base.OnStartup(e);
     }
@@ -100,8 +107,8 @@ public partial class App : System.Windows.Application
 
     private static void ConfigureServices(IServiceCollection services)
     {
-        services.AddDbContext<ApplicationDbContext>();
-        services.AddScoped<DataService>();
+        services.AddDbContextFactory<ApplicationDbContext>();
+        services.AddSingleton<DataService>();
         services.AddSingleton<UsbMonitorService>();
         services.AddSingleton<RawInputService>();
         services.AddTransient<DeviceListViewModel>();

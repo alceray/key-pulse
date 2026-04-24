@@ -49,7 +49,7 @@
       CanUserResizeRows="False"
     >
       <DataGrid.Columns>
-        <DataGridTextColumn Header="Device ID" Binding="{Binding DeviceId}" Width="Auto" />
+        <DataGridTextColumn Header="Device ID" Binding="{Binding DeviceId}" MinWidth="175" Width="Auto" />
         <DataGridTextColumn Header="Device Type" Binding="{Binding DeviceType}" Width="Auto" />
         <DataGridTextColumn Header="Device Name" Binding="{Binding DeviceName}" Width="*" />
         <DataGridTextColumn

@@ -8,39 +8,43 @@ namespace KeyPulse.Services;
 
 public class DataService
 {
-    private readonly ApplicationDbContext _context;
+    private readonly IDbContextFactory<ApplicationDbContext> _factory;
 
-    public DataService(ApplicationDbContext context)
+    public DataService(IDbContextFactory<ApplicationDbContext> factory)
     {
-        _context = context;
+        _factory = factory;
         InitializeDatabase();
     }
 
     private void InitializeDatabase()
     {
-        _context.Database.Migrate();
+        using var ctx = _factory.CreateDbContext();
+        ctx.Database.Migrate();
     }
 
     public Device? GetDevice(string deviceId)
     {
-        return _context.Devices.Find(deviceId);
+        using var ctx = _factory.CreateDbContext();
+        return ctx.Devices.Find(deviceId);
     }
 
     public IReadOnlyCollection<Device> GetAllDevices()
     {
-        return _context.Devices.ToList().AsReadOnly();
+        using var ctx = _factory.CreateDbContext();
+        return ctx.Devices.ToList().AsReadOnly();
     }
 
     public void SaveDevice(Device device)
     {
         try
         {
-            var existingDevice = _context.Devices.SingleOrDefault(d => d.DeviceId == device.DeviceId);
-            if (existingDevice != null)
-                _context.Entry(existingDevice).CurrentValues.SetValues(device);
+            using var ctx = _factory.CreateDbContext();
+            var existing = ctx.Devices.SingleOrDefault(d => d.DeviceId == device.DeviceId);
+            if (existing != null)
+                ctx.Entry(existing).CurrentValues.SetValues(device);
             else
-                _context.Devices.Add(device);
-            _context.SaveChanges();
+                ctx.Devices.Add(device);
+            ctx.SaveChanges();
         }
         catch (Exception ex)
         {
@@ -50,17 +54,21 @@ public class DataService
 
     public bool IsAnyDeviceActive()
     {
-        return _context.Devices.Any(d => d.IsActive);
+        using var ctx = _factory.CreateDbContext();
+        // SessionStartedAt is mapped; IsActive is [NotMapped] and cannot be translated.
+        return ctx.Devices.Any(d => d.SessionStartedAt != null);
     }
 
     public IReadOnlyCollection<DeviceEvent> GetAllDeviceEvents()
     {
-        return _context.DeviceEvents.ToList().AsReadOnly();
+        using var ctx = _factory.CreateDbContext();
+        return ctx.DeviceEvents.ToList().AsReadOnly();
     }
 
     public DeviceEvent? GetLastDeviceEvent(string? deviceId = null)
     {
-        var query = _context.DeviceEvents.AsQueryable();
+        using var ctx = _factory.CreateDbContext();
+        var query = ctx.DeviceEvents.AsQueryable();
 
         if (!string.IsNullOrWhiteSpace(deviceId))
             query = query.Where(e => e.DeviceId == deviceId);
@@ -70,7 +78,9 @@ public class DataService
 
     public IReadOnlyCollection<DeviceEvent> GetEventsFromLastCompletedSession()
     {
-        var lastAppEnded = _context
+        using var ctx = _factory.CreateDbContext();
+
+        var lastAppEnded = ctx
             .DeviceEvents.Where(e => e.EventType == EventTypes.AppEnded)
             .OrderByDescending(e => e.DeviceEventId)
             .Select(e => (int?)e.DeviceEventId)
@@ -79,7 +89,7 @@ public class DataService
         if (!lastAppEnded.HasValue)
             return [];
 
-        var lastAppStarted = _context
+        var lastAppStarted = ctx
             .DeviceEvents.Where(e => e.EventType == EventTypes.AppStarted && e.DeviceEventId < lastAppEnded.Value)
             .OrderByDescending(e => e.DeviceEventId)
             .Select(e => (int?)e.DeviceEventId)
@@ -88,7 +98,7 @@ public class DataService
         if (!lastAppStarted.HasValue)
             return [];
 
-        return _context
+        return ctx
             .DeviceEvents.Where(e => e.DeviceEventId > lastAppStarted.Value && e.DeviceEventId < lastAppEnded.Value)
             .OrderBy(e => e.DeviceEventId)
             .ToList()
@@ -99,8 +109,9 @@ public class DataService
     {
         try
         {
-            _context.DeviceEvents.Add(deviceEvent);
-            _context.SaveChanges();
+            using var ctx = _factory.CreateDbContext();
+            ctx.DeviceEvents.Add(deviceEvent);
+            ctx.SaveChanges();
         }
         catch (DbUpdateException ex)
         {
@@ -116,8 +127,9 @@ public class DataService
     {
         try
         {
-            _context.ActivitySnapshots.AddRange(snapshots);
-            _context.SaveChanges();
+            using var ctx = _factory.CreateDbContext();
+            ctx.ActivitySnapshots.AddRange(snapshots);
+            ctx.SaveChanges();
         }
         catch (Exception ex)
         {
@@ -131,7 +143,8 @@ public class DataService
         DateTime? to = null
     )
     {
-        var query = _context.ActivitySnapshots.AsQueryable();
+        using var ctx = _factory.CreateDbContext();
+        var query = ctx.ActivitySnapshots.AsQueryable();
 
         if (!string.IsNullOrWhiteSpace(deviceId))
             query = query.Where(s => s.DeviceId == deviceId);
@@ -145,19 +158,17 @@ public class DataService
 
     /// <summary>
     /// Recomputes total usage for a device from the event log.
-    /// Used for snapshot rebuild/recovery.
+    /// Accepts an open context so callers sharing a unit of work can avoid extra round-trips.
     /// </summary>
-    private TimeSpan ComputeTotalUsage(string deviceId)
+    private static TimeSpan ComputeTotalUsage(ApplicationDbContext ctx, string deviceId)
     {
         var totalUsage = TimeSpan.Zero;
         DateTime? lastStartTime = null;
-        var events = _context.DeviceEvents.Where(e => e.DeviceId == deviceId).OrderBy(e => e.DeviceEventId).ToList();
+        var events = ctx.DeviceEvents.Where(e => e.DeviceId == deviceId).OrderBy(e => e.DeviceEventId).ToList();
 
         foreach (var deviceEvent in events)
             if (deviceEvent.EventType.IsOpeningEvent())
-            {
                 lastStartTime = deviceEvent.Timestamp;
-            }
             else if (deviceEvent.EventType.IsClosingEvent() && lastStartTime.HasValue)
             {
                 totalUsage += deviceEvent.Timestamp - lastStartTime.Value;
@@ -175,7 +186,9 @@ public class DataService
     /// </summary>
     public void RecoverFromCrash()
     {
-        var lastAppEvent = _context
+        using var ctx = _factory.CreateDbContext();
+
+        var lastAppEvent = ctx
             .DeviceEvents.Where(e => e.EventType == EventTypes.AppStarted || e.EventType == EventTypes.AppEnded)
             .OrderByDescending(e => e.DeviceEventId)
             .FirstOrDefault();
@@ -192,21 +205,19 @@ public class DataService
                 ? heartbeatTime.Value
                 : orphanedSessionStart;
 
-        // Backfill ConnectionEnded for devices that have more opening than closing events in the orphaned session.
-        var orphanedSessionDeviceEvents = _context
+        // Backfill ConnectionEnded for devices that have more opening than closing events.
+        var orphanedSessionDeviceEvents = ctx
             .DeviceEvents.Where(e => e.DeviceId != "" && e.Timestamp >= orphanedSessionStart)
             .ToList();
 
         var unbalancedDeviceIds = orphanedSessionDeviceEvents
             .GroupBy(e => e.DeviceId)
-            .Where(group =>
-                group.Count(e => e.EventType.IsOpeningEvent()) > group.Count(e => e.EventType.IsClosingEvent())
-            )
-            .Select(group => group.Key)
+            .Where(g => g.Count(e => e.EventType.IsOpeningEvent()) > g.Count(e => e.EventType.IsClosingEvent()))
+            .Select(g => g.Key)
             .ToList();
 
         foreach (var deviceId in unbalancedDeviceIds)
-            _context.DeviceEvents.Add(
+            ctx.DeviceEvents.Add(
                 new DeviceEvent
                 {
                     DeviceId = deviceId,
@@ -215,28 +226,28 @@ public class DataService
                 }
             );
 
-        _context.DeviceEvents.Add(new DeviceEvent { EventType = EventTypes.AppEnded, Timestamp = crashTime });
+        ctx.DeviceEvents.Add(new DeviceEvent { EventType = EventTypes.AppEnded, Timestamp = crashTime });
 
-        _context.SaveChanges();
+        ctx.SaveChanges();
         Debug.WriteLine("RecoverFromCrash: wrote missing AppEnded and ConnectionEnded events.");
     }
 
     /// <summary>
     /// Rebuilds persisted device snapshots from the event log.
-    /// DeviceEvents remain the repair source of truth; DeviceInfo acts as the fast-read snapshot.
+    /// DeviceEvents remain the source of truth; Device acts as the fast-read snapshot.
     /// </summary>
     public void RebuildDeviceSnapshots()
     {
         try
         {
-            var devices = _context.Devices.ToList();
+            using var ctx = _factory.CreateDbContext();
+            var devices = ctx.Devices.ToList();
             foreach (var device in devices)
             {
-                device.TotalUsage = ComputeTotalUsage(device.DeviceId);
+                device.TotalUsage = ComputeTotalUsage(ctx, device.DeviceId);
                 device.SessionStartedAt = null;
             }
-
-            _context.SaveChanges();
+            ctx.SaveChanges();
         }
         catch (Exception ex)
         {

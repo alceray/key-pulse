@@ -27,7 +27,7 @@ public static class HeartbeatFile
     {
         try
         {
-            File.WriteAllText(FilePath, DateTime.UtcNow.ToString("O"));
+            File.WriteAllText(FilePath, DateTime.Now.ToString("O"));
         }
         catch (Exception ex)
         {
@@ -46,7 +46,7 @@ public static class HeartbeatFile
                 return null;
             var text = File.ReadAllText(FilePath).Trim();
             return DateTime.TryParse(text, null, System.Globalization.DateTimeStyles.RoundtripKind, out var dt)
-                ? dt.ToLocalTime()
+                ? dt
                 : null;
         }
         catch (Exception ex)

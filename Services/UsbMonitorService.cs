@@ -51,8 +51,18 @@ public class UsbMonitorService : IDisposable
             TimeSpan.FromSeconds(30),
             TimeSpan.FromSeconds(30)
         );
+    }
 
-        SetCurrentDevicesFromSystem();
+    /// <summary>
+    /// Performs the slow startup work off the UI thread: WMI device snapshot and watcher setup.
+    /// Must be called once after construction, before the app is considered ready.
+    /// </summary>
+    public async Task StartAsync()
+    {
+        // SetCurrentDevicesFromSystem does WMI queries and PowerShell device-name lookups
+        // which can take 1-3 seconds — run on a thread pool thread to keep the UI responsive.
+        // Internal Dispatcher.Invoke calls marshal UI work back to the UI thread safely.
+        await Task.Run(SetCurrentDevicesFromSystem);
         StartMonitoring();
     }
 
