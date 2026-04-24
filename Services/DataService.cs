@@ -1,5 +1,6 @@
 ﻿using System.Diagnostics;
 using KeyPulse.Data;
+using KeyPulse.Helpers;
 using KeyPulse.Models;
 using Microsoft.EntityFrameworkCore;
 
@@ -168,12 +169,17 @@ public class DataService
             .OrderByDescending(e => e.DeviceEventId)
             .FirstOrDefault();
 
-        // If the last app-lifecycle event was an AppStarted with no AppEnded, the previous
-        // session didn't shut down cleanly — fill in the missing closing events.
         if (lastAppEvent == null || lastAppEvent.EventType != EventTypes.AppStarted)
             return;
 
+        // Use the last heartbeat as the crash time if it's more recent than the session start.
+        // Falls back to the session start timestamp if no heartbeat is available.
         var orphanedSessionStart = lastAppEvent.Timestamp;
+        var heartbeatTime = HeartbeatFile.Read();
+        var crashTime =
+            heartbeatTime.HasValue && heartbeatTime.Value > orphanedSessionStart
+                ? heartbeatTime.Value
+                : orphanedSessionStart;
 
         // Write ConnectionEnded for any devices that were still active in that session
         var orphanedActiveDevices = _context
@@ -191,11 +197,7 @@ public class DataService
             // Only add ConnectionEnded if it wasn't already closed in that session
             var wasClosedInSession = _context.DeviceEvents.Any(e =>
                 e.DeviceId == deviceId
-                && (
-                    e.EventType == EventTypes.ConnectionEnded
-                    || e.EventType == EventTypes.Disconnected
-                    || e.EventType == EventTypes.Suspended
-                )
+                && (e.EventType == EventTypes.ConnectionEnded || e.EventType == EventTypes.Disconnected)
                 && e.Timestamp >= orphanedSessionStart
             );
 
@@ -205,19 +207,12 @@ public class DataService
                     {
                         DeviceId = deviceId,
                         EventType = EventTypes.ConnectionEnded,
-                        Timestamp = orphanedSessionStart, // best-effort timestamp
+                        Timestamp = crashTime,
                     }
                 );
         }
 
-        // Write the missing AppEnded
-        _context.DeviceEvents.Add(
-            new DeviceEvent
-            {
-                EventType = EventTypes.AppEnded,
-                Timestamp = orphanedSessionStart, // best-effort timestamp
-            }
-        );
+        _context.DeviceEvents.Add(new DeviceEvent { EventType = EventTypes.AppEnded, Timestamp = crashTime });
 
         _context.SaveChanges();
         Debug.WriteLine("RecoverFromCrash: wrote missing AppEnded and ConnectionEnded events.");

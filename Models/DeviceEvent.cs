@@ -25,15 +25,6 @@ public enum EventTypes
 
     /// <summary>Device unplugged during runtime</summary>
     Disconnected,
-
-    /// <summary>Device suspended (not currently used)</summary>
-    Suspended,
-
-    /// <summary>Device resumed (not currently used)</summary>
-    Resumed,
-
-    /// <summary>Error event (not currently used)</summary>
-    Error,
 }
 
 /// <summary>
@@ -42,20 +33,10 @@ public enum EventTypes
 public static class EventTypeExtensions
 {
     /// <summary>Opening events indicate a device becoming active/connected.</summary>
-    private static readonly List<EventTypes> OpeningEvents =
-    [
-        EventTypes.ConnectionStarted,
-        EventTypes.Connected,
-        EventTypes.Resumed,
-    ];
+    private static readonly List<EventTypes> OpeningEvents = [EventTypes.ConnectionStarted, EventTypes.Connected];
 
     /// <summary>Closing events indicate a device becoming inactive/disconnected.</summary>
-    private static readonly List<EventTypes> ClosingEvents =
-    [
-        EventTypes.ConnectionEnded,
-        EventTypes.Disconnected,
-        EventTypes.Suspended,
-    ];
+    private static readonly List<EventTypes> ClosingEvents = [EventTypes.ConnectionEnded, EventTypes.Disconnected];
 
     /// <summary>App-level events that don't relate to specific devices.</summary>
     private static readonly List<EventTypes> AppEvents = [EventTypes.AppStarted, EventTypes.AppEnded];

@@ -17,8 +17,6 @@ public class UsbMonitorService : IDisposable
     public ObservableCollection<DeviceEvent> DeviceEventList;
     public DateTime AppSessionStartedAt { get; private set; }
 
-    private readonly DataService _dataService;
-
     // for every irl connection, 2-3 insert events are created within a very short timeframe, so this cache of
     // recently inserted devices helps to prevent inserting duplicate connected events in the db.
     private readonly ConcurrentDictionary<
@@ -28,6 +26,8 @@ public class UsbMonitorService : IDisposable
 
     private readonly string _unknownDeviceName = "Unknown Device";
     private bool _disposed = false;
+    private readonly DataService _dataService;
+    private readonly Timer _heartbeatTimer;
 
     public UsbMonitorService(DataService dataService)
     {
@@ -41,11 +41,15 @@ public class UsbMonitorService : IDisposable
 
         DeviceEventList = new ObservableCollection<DeviceEvent>(_dataService.GetAllDeviceEvents());
 
-        // TODO: Handle app/system crashes before uncommenting
-        //if (_dataService.IsAnyDeviceActive())
-        //{
-        //    throw new InvalidOperationException("Cannot initialize usb monitor service with active devices");
-        //}
+        // Write heartbeat immediately, then every 30 seconds, so RecoverFromCrash
+        // has a recent timestamp if the process is force-killed.
+        HeartbeatFile.Write();
+        _heartbeatTimer = new Timer(
+            _ => HeartbeatFile.Write(),
+            null,
+            TimeSpan.FromSeconds(30),
+            TimeSpan.FromSeconds(30)
+        );
 
         SetCurrentDevicesFromSystem();
         StartMonitoring();
@@ -311,22 +315,18 @@ public class UsbMonitorService : IDisposable
 
                 var currDevice = DeviceList.FirstOrDefault(d => d.DeviceId == deviceId);
                 if (currDevice != null)
-                {
                     currDevice.DeviceType = UsbDeviceClassifier.ResolveDeviceType(
                         keyboardSignals,
                         mouseSignals,
                         currDevice.DeviceType
                     );
-                }
                 else
-                {
                     currDevice = new DeviceInfo
                     {
                         DeviceId = deviceId,
                         DeviceName = PowershellScripts.GetDeviceName(deviceId) ?? _unknownDeviceName,
                         DeviceType = UsbDeviceClassifier.ResolveDeviceType(keyboardSignals, mouseSignals),
                     };
-                }
 
                 var connectionStartedEvent = new DeviceEvent
                 {
@@ -356,6 +356,9 @@ public class UsbMonitorService : IDisposable
 
         if (disposing)
         {
+            _heartbeatTimer.Dispose();
+            HeartbeatFile.Clear();
+
             var sessionTimestamp = DateTime.Now;
             foreach (var device in DeviceList)
             {

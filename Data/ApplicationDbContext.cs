@@ -37,10 +37,9 @@ public class ApplicationDbContext : DbContext
 
         modelBuilder.Entity<DeviceEvent>().ToTable("DeviceEvents");
 
-        modelBuilder
-            .Entity<DeviceEvent>()
-            .HasIndex(e => e.Timestamp)
-            .HasDatabaseName("Idx_DeviceEvents_Timestamp");
+        modelBuilder.Entity<DeviceEvent>().Property(e => e.EventType).HasConversion<string>();
+
+        modelBuilder.Entity<DeviceEvent>().HasIndex(e => e.Timestamp).HasDatabaseName("Idx_DeviceEvents_Timestamp");
 
         modelBuilder
             .Entity<DeviceEvent>()
