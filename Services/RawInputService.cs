@@ -15,6 +15,12 @@ namespace KeyPulse.Services;
 /// </summary>
 public class RawInputService : IDisposable
 {
+    /// <summary>
+    /// Raised when hold state changes for a device.
+    /// True while any key or mouse button is held, false when all are released.
+    /// </summary>
+    public event Action<string, bool>? ActivityStateChanged;
+
     #region Win32 constants
 
     private const int WM_INPUT = 0x00FF;
@@ -26,16 +32,29 @@ public class RawInputService : IDisposable
 
     // Mouse button-down flags (bit 0 of the pair = button down, bit 1 = button up)
     private const ushort RI_MOUSE_BUTTON_1_DOWN = 0x0001;
+    private const ushort RI_MOUSE_BUTTON_1_UP = 0x0002;
     private const ushort RI_MOUSE_BUTTON_2_DOWN = 0x0004;
+    private const ushort RI_MOUSE_BUTTON_2_UP = 0x0008;
     private const ushort RI_MOUSE_BUTTON_3_DOWN = 0x0010;
+    private const ushort RI_MOUSE_BUTTON_3_UP = 0x0020;
     private const ushort RI_MOUSE_BUTTON_4_DOWN = 0x0040;
+    private const ushort RI_MOUSE_BUTTON_4_UP = 0x0080;
     private const ushort RI_MOUSE_BUTTON_5_DOWN = 0x0100;
+    private const ushort RI_MOUSE_BUTTON_5_UP = 0x0200;
+
     private const ushort MOUSE_BUTTON_DOWN_MASK =
         RI_MOUSE_BUTTON_1_DOWN
         | RI_MOUSE_BUTTON_2_DOWN
         | RI_MOUSE_BUTTON_3_DOWN
         | RI_MOUSE_BUTTON_4_DOWN
         | RI_MOUSE_BUTTON_5_DOWN;
+
+    private const ushort MOUSE_BUTTON_UP_MASK =
+        RI_MOUSE_BUTTON_1_UP
+        | RI_MOUSE_BUTTON_2_UP
+        | RI_MOUSE_BUTTON_3_UP
+        | RI_MOUSE_BUTTON_4_UP
+        | RI_MOUSE_BUTTON_5_UP;
 
     // RAWKEYBOARD.Flags: bit 0 set = key-up (break), bit 0 clear = key-down (make)
     private const ushort RI_KEY_BREAK = 0x01;
@@ -154,6 +173,8 @@ public class RawInputService : IDisposable
     // Shared state — all access guarded by _lock
     private readonly object _lock = new();
     private readonly Dictionary<(string DeviceId, DateTime Minute), ActivityBucket> _buckets = new();
+    private readonly Dictionary<string, HashSet<ushort>> _pressedKeysByDevice = new();
+    private readonly Dictionary<string, HashSet<int>> _pressedMouseButtonsByDevice = new();
 
     // hDevice handle → DeviceId cache; only touched on the UI thread (WndProc), no lock needed.
     private readonly Dictionary<IntPtr, string?> _deviceHandleCache = new();
@@ -242,7 +263,7 @@ public class RawInputService : IDisposable
 
     private void ProcessRawInput(IntPtr lParam)
     {
-        uint headerSize = (uint)Marshal.SizeOf<RAWINPUTHEADER>();
+        var headerSize = (uint)Marshal.SizeOf<RAWINPUTHEADER>();
         uint size = 0;
 
         // First call: query required buffer size.
@@ -269,19 +290,31 @@ public class RawInputService : IDisposable
             if (header.dwType == RIM_TYPEKEYBOARD)
             {
                 var kb = Marshal.PtrToStructure<RAWKEYBOARD>(bodyPtr);
-
-                // Skip key-up events; only count key-down (make).
-                if ((kb.Flags & RI_KEY_BREAK) != 0)
-                    return;
+                var isKeyDown = (kb.Flags & RI_KEY_BREAK) == 0;
+                bool nextActivityState;
 
                 lock (_lock)
                 {
-                    GetOrCreateBucket(deviceId, minute).Keystrokes++;
+                    if (isKeyDown)
+                    {
+                        GetOrCreateBucket(deviceId, minute).Keystrokes++;
+                        var pressedKeys = GetOrCreatePressedKeys(deviceId);
+                        pressedKeys.Add(kb.VKey);
+                    }
+                    else if (_pressedKeysByDevice.TryGetValue(deviceId, out var pressedKeys))
+                    {
+                        pressedKeys.Remove(kb.VKey);
+                    }
+
+                    nextActivityState = ComputeHoldState(deviceId);
                 }
+
+                ActivityStateChanged?.Invoke(deviceId, nextActivityState);
             }
             else if (header.dwType == RIM_TYPEMOUSE)
             {
                 var mouse = Marshal.PtrToStructure<RAWMOUSE>(bodyPtr);
+                bool? nextActivityState = null;
 
                 if (mouse.usButtonFlags == 0)
                 {
@@ -293,20 +326,101 @@ public class RawInputService : IDisposable
                         GetOrCreateBucket(deviceId, minute).ActiveMovementSeconds.Add(second);
                     }
                 }
-                else if ((mouse.usButtonFlags & MOUSE_BUTTON_DOWN_MASK) != 0)
-                {
-                    // Button down event — count it.
+
+                if ((mouse.usButtonFlags & MOUSE_BUTTON_DOWN_MASK) != 0)
                     lock (_lock)
                     {
                         GetOrCreateBucket(deviceId, minute).MouseClicks++;
+                        var pressedButtons = GetOrCreatePressedMouseButtons(deviceId);
+                        AddPressedMouseButtons(pressedButtons, mouse.usButtonFlags);
+                        nextActivityState = ComputeHoldState(deviceId);
                     }
-                }
+
+                if ((mouse.usButtonFlags & MOUSE_BUTTON_UP_MASK) != 0)
+                    lock (_lock)
+                    {
+                        if (_pressedMouseButtonsByDevice.TryGetValue(deviceId, out var pressedButtons))
+                            RemovePressedMouseButtons(pressedButtons, mouse.usButtonFlags);
+                        nextActivityState = ComputeHoldState(deviceId);
+                    }
+
+                if (nextActivityState.HasValue)
+                    ActivityStateChanged?.Invoke(deviceId, nextActivityState.Value);
             }
         }
         finally
         {
             Marshal.FreeHGlobal(buffer);
         }
+    }
+
+    public void ClearDeviceHoldState(string deviceId)
+    {
+        lock (_lock)
+        {
+            _pressedKeysByDevice.Remove(deviceId);
+            _pressedMouseButtonsByDevice.Remove(deviceId);
+        }
+
+        ActivityStateChanged?.Invoke(deviceId, false);
+    }
+
+    private HashSet<ushort> GetOrCreatePressedKeys(string deviceId)
+    {
+        if (!_pressedKeysByDevice.TryGetValue(deviceId, out var pressedKeys))
+        {
+            pressedKeys = new HashSet<ushort>();
+            _pressedKeysByDevice[deviceId] = pressedKeys;
+        }
+
+        return pressedKeys;
+    }
+
+    private HashSet<int> GetOrCreatePressedMouseButtons(string deviceId)
+    {
+        if (!_pressedMouseButtonsByDevice.TryGetValue(deviceId, out var pressedButtons))
+        {
+            pressedButtons = new HashSet<int>();
+            _pressedMouseButtonsByDevice[deviceId] = pressedButtons;
+        }
+
+        return pressedButtons;
+    }
+
+    private static void AddPressedMouseButtons(HashSet<int> pressedButtons, ushort flags)
+    {
+        if ((flags & RI_MOUSE_BUTTON_1_DOWN) != 0)
+            pressedButtons.Add(1);
+        if ((flags & RI_MOUSE_BUTTON_2_DOWN) != 0)
+            pressedButtons.Add(2);
+        if ((flags & RI_MOUSE_BUTTON_3_DOWN) != 0)
+            pressedButtons.Add(3);
+        if ((flags & RI_MOUSE_BUTTON_4_DOWN) != 0)
+            pressedButtons.Add(4);
+        if ((flags & RI_MOUSE_BUTTON_5_DOWN) != 0)
+            pressedButtons.Add(5);
+    }
+
+    private static void RemovePressedMouseButtons(HashSet<int> pressedButtons, ushort flags)
+    {
+        if ((flags & RI_MOUSE_BUTTON_1_UP) != 0)
+            pressedButtons.Remove(1);
+        if ((flags & RI_MOUSE_BUTTON_2_UP) != 0)
+            pressedButtons.Remove(2);
+        if ((flags & RI_MOUSE_BUTTON_3_UP) != 0)
+            pressedButtons.Remove(3);
+        if ((flags & RI_MOUSE_BUTTON_4_UP) != 0)
+            pressedButtons.Remove(4);
+        if ((flags & RI_MOUSE_BUTTON_5_UP) != 0)
+            pressedButtons.Remove(5);
+    }
+
+    private bool ComputeHoldState(string deviceId)
+    {
+        var hasPressedKeys = _pressedKeysByDevice.TryGetValue(deviceId, out var pressedKeys) && pressedKeys.Count > 0;
+        var hasPressedMouseButtons =
+            _pressedMouseButtonsByDevice.TryGetValue(deviceId, out var pressedButtons) && pressedButtons.Count > 0;
+        return hasPressedKeys || hasPressedMouseButtons;
     }
 
     /// <summary>
@@ -321,6 +435,7 @@ public class RawInputService : IDisposable
             bucket = new ActivityBucket();
             _buckets[key] = bucket;
         }
+
         return bucket;
     }
 

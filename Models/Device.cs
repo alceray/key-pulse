@@ -33,6 +33,7 @@ public class Device : ObservableObject
     private TimeSpan _storedTotalUsage = TimeSpan.Zero;
     private DateTime? _sessionStartedAt;
     private DateTime? _lastConnectedAt;
+    private bool _isActive;
 
     /// <summary>
     /// Unique identifier for the device in format: USB\VID_xxxx&PID_xxxx
@@ -65,11 +66,10 @@ public class Device : ObservableObject
     }
 
     /// <summary>
-    /// Whether the device is currently connected and active.
-    /// Computed from whether SessionStartedAt has a value.
+    /// Whether the device is currently connected.
     /// </summary>
     [NotMapped]
-    public bool IsActive => _sessionStartedAt.HasValue;
+    public bool IsConnected => _sessionStartedAt.HasValue;
 
     /// <summary>
     /// Cumulative usage time snapshot rebuilt from connection event boundaries.
@@ -105,7 +105,7 @@ public class Device : ObservableObject
             {
                 _sessionStartedAt = value;
                 OnPropertyChanged(nameof(SessionStartedAt));
-                OnPropertyChanged(nameof(IsActive));
+                OnPropertyChanged(nameof(IsConnected));
                 OnPropertyChanged(nameof(TotalUsage));
             }
         }
@@ -135,6 +135,31 @@ public class Device : ObservableObject
     [NotMapped]
     public string LastConnectedRelative =>
         LastConnectedAt.HasValue ? TimeFormatter.ToRelativeTime(LastConnectedAt.Value) : "N/A";
+
+    /// <summary>
+    /// Whether a mouse click or keyboard stroke occurred recently (within activity hot window).
+    /// </summary>
+    [NotMapped]
+    public bool IsActive
+    {
+        get => _isActive;
+        private set
+        {
+            if (_isActive != value)
+            {
+                _isActive = value;
+                OnPropertyChanged(nameof(IsActive));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Sets live activity state (true while any key/button is currently held).
+    /// </summary>
+    public void SetActivityState(bool isActive)
+    {
+        IsActive = isActive;
+    }
 
     /// <summary>
     /// Updates LastConnectedAt using event-aware rules:

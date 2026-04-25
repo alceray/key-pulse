@@ -84,18 +84,30 @@ public class UsbMonitorService : IDisposable
         if (deviceEvent.EventType.IsAppEvent() || device == null)
             return;
 
-        // Ensure device is in the DeviceList
-        if (!DeviceList.Any(d => d.DeviceId == device.DeviceId))
+        var trackedDevice = device;
+
+        // Always resolve/apply state on the UI-bound DeviceList instance.
+        // DataService.GetDevice returns detached objects when using DbContextFactory,
+        // so mutating that instance does not update the UI.
+        Application.Current.Dispatcher.Invoke(() =>
         {
+            var existingDevice = DeviceList.FirstOrDefault(d => d.DeviceId == device.DeviceId);
+            if (existingDevice != null)
+            {
+                trackedDevice = existingDevice;
+                return;
+            }
+
             device.PropertyChanged += Device_PropertyChanged;
-            Application.Current.Dispatcher.Invoke(() => DeviceList.Add(device));
-        }
+            DeviceList.Add(device);
+            trackedDevice = device;
+        });
 
         // Perform device state management based on event type
         if (deviceEvent.EventType.IsOpeningEvent())
         {
-            device.SessionStartedAt = deviceEvent.Timestamp;
-            device.UpdateLastConnectedAt(
+            trackedDevice.SessionStartedAt = deviceEvent.Timestamp;
+            trackedDevice.UpdateLastConnectedAt(
                 deviceEvent.Timestamp,
                 deviceEvent.EventType,
                 _dataService.GetEventsFromLastCompletedSession()
@@ -103,10 +115,10 @@ public class UsbMonitorService : IDisposable
         }
         else if (deviceEvent.EventType.IsClosingEvent())
         {
-            device.CommitSessionUsage(deviceEvent.Timestamp);
+            trackedDevice.CommitSessionUsage(deviceEvent.Timestamp);
         }
 
-        _dataService.SaveDevice(device);
+        _dataService.SaveDevice(trackedDevice);
     }
 
     private void DeviceInsertedEvent(object sender, EventArrivedEventArgs e)
@@ -386,7 +398,7 @@ public class UsbMonitorService : IDisposable
             var sessionTimestamp = DateTime.Now;
             foreach (var device in DeviceList)
             {
-                if (device.IsActive)
+                if (device.IsConnected)
                 {
                     var connectionEndedEvent = new DeviceEvent
                     {

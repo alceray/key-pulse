@@ -53,13 +53,6 @@ public class DataService
         }
     }
 
-    public bool IsAnyDeviceActive()
-    {
-        using var ctx = _factory.CreateDbContext();
-        // SessionStartedAt is mapped; IsActive is [NotMapped] and cannot be translated.
-        return ctx.Devices.Any(d => d.SessionStartedAt != null);
-    }
-
     public IReadOnlyCollection<DeviceEvent> GetAllDeviceEvents()
     {
         using var ctx = _factory.CreateDbContext();
@@ -169,7 +162,9 @@ public class DataService
 
         foreach (var deviceEvent in events)
             if (deviceEvent.EventType.IsOpeningEvent())
+            {
                 lastStartTime = deviceEvent.Timestamp;
+            }
             else if (deviceEvent.EventType.IsClosingEvent() && lastStartTime.HasValue)
             {
                 totalUsage += deviceEvent.Timestamp - lastStartTime.Value;
@@ -248,6 +243,7 @@ public class DataService
                 device.TotalUsage = ComputeTotalUsage(ctx, device.DeviceId);
                 device.SessionStartedAt = null;
             }
+
             ctx.SaveChanges();
         }
         catch (Exception ex)

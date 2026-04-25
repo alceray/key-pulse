@@ -1,4 +1,4 @@
-﻿using System.Collections.Specialized;
+using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Data;
@@ -14,6 +14,7 @@ namespace KeyPulse.ViewModels;
 public class DeviceListViewModel : ObservableObject, IDisposable
 {
     private readonly UsbMonitorService _usbMonitorService;
+    private readonly RawInputService _rawInputService;
     private readonly DispatcherTimer _timer;
 
     public ICollectionView DeviceListCollection { get; }
@@ -59,17 +60,19 @@ public class DeviceListViewModel : ObservableObject, IDisposable
 
     private string _currentSessionTime = "00:00:00";
 
-    public DeviceListViewModel(UsbMonitorService usbMonitorService)
+    public DeviceListViewModel(UsbMonitorService usbMonitorService, RawInputService rawInputService)
     {
         _usbMonitorService = usbMonitorService;
+        _rawInputService = rawInputService;
 
         DeviceListCollection = CollectionViewSource.GetDefaultView(_usbMonitorService.DeviceList);
-        DeviceListCollection.Filter = device => ShowAllDevices || ((Device)device).IsActive;
+        DeviceListCollection.Filter = device => ShowAllDevices || ((Device)device).IsConnected;
 
         foreach (var device in _usbMonitorService.DeviceList)
             device.PropertyChanged += Device_PropertyChanged;
 
         _usbMonitorService.DeviceList.CollectionChanged += DeviceList_CollectionChanged;
+        _rawInputService.ActivityStateChanged += OnActivityStateChanged;
 
         RenameDeviceCommand = new RelayCommand(ExecuteRenameDevice, CanExecuteRenameDevice);
 
@@ -89,12 +92,27 @@ public class DeviceListViewModel : ObservableObject, IDisposable
 
     private void Device_PropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(Device.IsActive))
+        if (e.PropertyName == nameof(Device.IsConnected))
+        {
+            if (sender is Device device && !device.IsConnected)
+            {
+                _rawInputService.ClearDeviceHoldState(device.DeviceId);
+                device.SetActivityState(false);
+            }
+
             Application.Current.Dispatcher.BeginInvoke(() =>
             {
                 DeviceListCollection.Refresh();
                 OnPropertyChanged(nameof(DeviceTitleWithCount));
             });
+        }
+    }
+
+    private void OnActivityStateChanged(string deviceId, bool isActive)
+    {
+        var device = _usbMonitorService.DeviceList.FirstOrDefault(d => d.DeviceId == deviceId);
+        if (device != null)
+            Application.Current.Dispatcher.BeginInvoke(() => device.SetActivityState(isActive));
     }
 
     private void DeviceList_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
@@ -143,6 +161,8 @@ public class DeviceListViewModel : ObservableObject, IDisposable
             device.PropertyChanged -= Device_PropertyChanged;
 
         _usbMonitorService.DeviceList.CollectionChanged -= DeviceList_CollectionChanged;
+        _rawInputService.ActivityStateChanged -= OnActivityStateChanged;
+
         _timer.Stop();
         GC.SuppressFinalize(this);
     }
