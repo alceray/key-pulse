@@ -140,7 +140,6 @@ public class DeviceListViewModel : ObservableObject, IDisposable
             if (!string.IsNullOrWhiteSpace(newName))
             {
                 device.DeviceName = newName;
-                OnPropertyChanged(nameof(device.DeviceName));
             }
         }
     }

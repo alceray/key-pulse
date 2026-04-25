@@ -163,11 +163,11 @@ public class DataService
         foreach (var deviceEvent in events)
             if (deviceEvent.EventType.IsOpeningEvent())
             {
-                lastStartTime = deviceEvent.Timestamp;
+                lastStartTime = deviceEvent.EventTime;
             }
             else if (deviceEvent.EventType.IsClosingEvent() && lastStartTime.HasValue)
             {
-                totalUsage += deviceEvent.Timestamp - lastStartTime.Value;
+                totalUsage += deviceEvent.EventTime - lastStartTime.Value;
                 lastStartTime = null;
             }
 
@@ -194,7 +194,7 @@ public class DataService
 
         // Use the last heartbeat as the crash time if it's more recent than the session start.
         // Falls back to the session start timestamp if no heartbeat is available.
-        var orphanedSessionStart = lastAppEvent.Timestamp;
+        var orphanedSessionStart = lastAppEvent.EventTime;
         var heartbeatTime = HeartbeatFile.Read();
         var crashTime =
             heartbeatTime.HasValue && heartbeatTime.Value > orphanedSessionStart
@@ -203,7 +203,7 @@ public class DataService
 
         // Backfill ConnectionEnded for devices that have more opening than closing events.
         var orphanedSessionDeviceEvents = ctx
-            .DeviceEvents.Where(e => e.DeviceId != "" && e.Timestamp >= orphanedSessionStart)
+            .DeviceEvents.Where(e => e.DeviceId != "" && e.EventTime >= orphanedSessionStart)
             .ToList();
 
         var unbalancedDeviceIds = orphanedSessionDeviceEvents
@@ -218,11 +218,11 @@ public class DataService
                 {
                     DeviceId = deviceId,
                     EventType = EventTypes.ConnectionEnded,
-                    Timestamp = crashTime,
+                    EventTime = crashTime,
                 }
             );
 
-        ctx.DeviceEvents.Add(new DeviceEvent { EventType = EventTypes.AppEnded, Timestamp = crashTime });
+        ctx.DeviceEvents.Add(new DeviceEvent { EventType = EventTypes.AppEnded, EventTime = crashTime });
 
         ctx.SaveChanges();
         Debug.WriteLine("RecoverFromCrash: wrote missing AppEnded and ConnectionEnded events.");

@@ -21,7 +21,7 @@ public static class HeartbeatFile
     }
 
     /// <summary>
-    /// Writes the current UTC timestamp to the heartbeat file.
+    /// Writes the current timestamp to the heartbeat file.
     /// </summary>
     public static void Write()
     {

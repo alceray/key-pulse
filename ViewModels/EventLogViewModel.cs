@@ -25,12 +25,10 @@ public class EventLogViewModel : ObservableObject, IDisposable
     public EventLogViewModel(UsbMonitorService usbMonitorService)
     {
         _usbMonitorService = usbMonitorService;
-        EventLogCollection = CollectionViewSource.GetDefaultView(
-            _usbMonitorService.DeviceEventList
-        );
+        EventLogCollection = CollectionViewSource.GetDefaultView(_usbMonitorService.DeviceEventList);
         EventLogCollection.Filter = de => !_hiddenEvents.Contains(((DeviceEvent)de).EventType);
         EventLogCollection.SortDescriptions.Add(
-            new SortDescription(nameof(DeviceEvent.Timestamp), ListSortDirection.Descending)
+            new SortDescription(nameof(DeviceEvent.EventTime), ListSortDirection.Descending)
         );
         _usbMonitorService.DeviceEventList.CollectionChanged += EventLog_CollectionChanged;
     }

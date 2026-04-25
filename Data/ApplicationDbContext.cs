@@ -42,19 +42,19 @@ public class ApplicationDbContext : DbContext
 
         modelBuilder.Entity<DeviceEvent>().Property(e => e.EventType).HasConversion<string>();
 
-        modelBuilder.Entity<DeviceEvent>().HasIndex(e => e.Timestamp).HasDatabaseName("Idx_DeviceEvents_Timestamp");
+        modelBuilder.Entity<DeviceEvent>().HasIndex(e => e.EventTime).HasDatabaseName("Idx_DeviceEvents_EventTime");
 
         modelBuilder
             .Entity<DeviceEvent>()
-            .HasIndex(e => new { e.DeviceId, e.Timestamp })
-            .HasDatabaseName("Idx_DeviceEvents_DeviceIdTimestamp");
+            .HasIndex(e => new { e.DeviceId, e.EventTime })
+            .HasDatabaseName("Idx_DeviceEvents_DeviceIdEventTime");
 
         modelBuilder
             .Entity<DeviceEvent>()
             .HasIndex(e => new
             {
                 e.DeviceId,
-                e.Timestamp,
+                e.EventTime,
                 e.EventType,
             })
             .IsUnique()

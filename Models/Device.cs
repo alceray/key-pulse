@@ -60,7 +60,7 @@ public class Device : ObservableObject
             if (_deviceName != value)
             {
                 _deviceName = value;
-                OnPropertyChanged(nameof(DeviceName));
+                OnPropertyChanged();
             }
         }
     }
@@ -87,8 +87,11 @@ public class Device : ObservableObject
         }
         set
         {
-            _storedTotalUsage = value;
-            OnPropertyChanged(nameof(TotalUsage));
+            if (!_storedTotalUsage.Equals(value))
+            {
+                _storedTotalUsage = value;
+                OnPropertyChanged();
+            }
         }
     }
 
@@ -104,7 +107,7 @@ public class Device : ObservableObject
             if (_sessionStartedAt != value)
             {
                 _sessionStartedAt = value;
-                OnPropertyChanged(nameof(SessionStartedAt));
+                OnPropertyChanged();
                 OnPropertyChanged(nameof(IsConnected));
                 OnPropertyChanged(nameof(TotalUsage));
             }
@@ -122,7 +125,7 @@ public class Device : ObservableObject
             if (_lastConnectedAt != value)
             {
                 _lastConnectedAt = value;
-                OnPropertyChanged(nameof(LastConnectedAt));
+                OnPropertyChanged();
                 OnPropertyChanged(nameof(LastConnectedRelative));
             }
         }
@@ -148,7 +151,7 @@ public class Device : ObservableObject
             if (_isActive != value)
             {
                 _isActive = value;
-                OnPropertyChanged(nameof(IsActive));
+                OnPropertyChanged();
             }
         }
     }

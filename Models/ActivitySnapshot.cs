@@ -23,7 +23,6 @@ public class ActivitySnapshot
 
     /// <summary>
     /// The start of the one-minute window this snapshot covers (seconds and below are zero).
-    /// Stored in UTC.
     /// </summary>
     [Required]
     public DateTime Minute { get; set; }

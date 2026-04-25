@@ -1,9 +1,9 @@
 ﻿# AGENTS.md: KeyPulse Architecture Guide
 
 ## Quick Overview
-**KeyPulse** is a .NET 8 WPF desktop app tracking USB keyboard/mouse usage on Windows. It uses WMI event watchers for live device detection and SQLite+EF Core for persistence. Single-instance with optional tray mode.
+**KeyPulse** is a .NET 8 WPF desktop app for tracking USB keyboard and mouse connections on Windows and recording per-device input activity. It uses WMI event watchers for device arrival/removal, Windows Raw Input for per-device keyboard/mouse activity, and SQLite+EF Core for persistence. The app is single-instance and supports optional tray/background mode.
 
-**Key Tech Stack**: WPF, EF Core 9, SQLite, System.Management (WMI), Dependency Injection
+**Key Tech Stack**: WPF, EF Core 9, SQLite, System.Management (WMI), Windows Raw Input (`WM_INPUT`), Dependency Injection
 
 ---
 
@@ -12,47 +12,75 @@
 ### Major Components
 1. **UsbMonitorService** (Singleton)
    - Monitors USB device insertion/removal via WMI `__InstanceCreationEvent` and `__InstanceDeletionEvent`
-   - Maintains `DeviceList` and `DeviceEventList` as ObservableCollections for UI binding
+   - Maintains `DeviceList` and `DeviceEventList` as `ObservableCollection<T>` instances for UI binding
    - Screens for HID keyboard/mouse devices only (`kbdhid`, `mouhid` services)
+   - Writes app/device lifecycle events and keeps the in-memory device snapshot in sync
+   - Owns the heartbeat timer used by crash recovery
    - See: `Services/UsbMonitorService.cs`
 
-2. **DataService** (Scoped)
+2. **RawInputService** (Singleton)
+   - Registers hidden `WM_INPUT` listeners using `RIDEV_INPUTSINK`, so activity is captured even in tray/background mode
+   - Maps raw input handles back to KeyPulse `DeviceId` values
+   - Tracks per-device keystrokes, mouse clicks, and mouse-movement-active seconds in one-minute buckets
+   - Flushes completed minute buckets to `ActivitySnapshots` every minute and flushes the current partial minute on shutdown
+   - Raises `ActivityStateChanged` so the UI can highlight currently active devices
+   - See: `Services/RawInputService.cs`
+
+3. **DataService** (Singleton)
    - Single source for all database operations
+   - Runs migrations and enables SQLite WAL mode on startup
    - Crash recovery: detects unclean shutdowns and writes missing `AppEnded`/`ConnectionEnded` events
-   - Rebuilds device snapshots from event log on startup
+   - Rebuilds persisted device usage snapshots from the event log on startup
+   - Persists and queries minute-level `ActivitySnapshot` rows
    - See: `Services/DataService.cs`
 
-3. **ApplicationDbContext** (DbContext)
-   - Two tables: `Devices` (DeviceInfo snapshots) and `DeviceEvents` (immutable event log)
+4. **ApplicationDbContext** (`DbContext`)
+   - Three tables: `Devices` (mutable snapshot), `DeviceEvents` (immutable lifecycle log), and `ActivitySnapshots` (minute-level input activity)
    - Database stored at `%AppData%\KeyPulse\devices.db`
-   - Unique constraint on `(DeviceId, Timestamp, EventType)` prevents duplicate events
+   - Unique constraint on `DeviceEvents(DeviceId, EventTime, EventType)` prevents duplicate lifecycle events
+   - Unique constraint on `ActivitySnapshots(DeviceId, Minute)` prevents duplicate minute buckets
    - See: `Data/ApplicationDbContext.cs`
 
 ### Data Persistence Model
-- **DeviceEvents** = immutable, append-only log of all lifecycle events (source of truth)
-- **DeviceInfo** = mutable, cached snapshot rebuilt from events at startup
-- Updates persist bidirectionally: events saved after device state changes, device snapshots updated from events
+- **DeviceEvents** = immutable, append-only log of app/device lifecycle transitions (source of truth for connection history)
+- **Devices** = mutable, fast-read snapshot used by the UI (`DeviceName`, `DeviceType`, `LastConnectedAt`, stored `TotalUsage`)
+- **ActivitySnapshots** = immutable minute buckets storing `Keystrokes`, `MouseClicks`, and `MouseActiveSeconds`
+- Updates flow in two directions:
+  - lifecycle changes append to `DeviceEvents` and update the corresponding `Device` snapshot
+  - raw input activity accumulates in memory, then flushes to `ActivitySnapshots`
 
-### Startup Sequence (See `App.OnStartup` + `UsbMonitorService.ctor`)
-1. Mutex check (single-instance enforcement)
-2. DI container setup
-3. `DataService.RecoverFromCrash()` — writes missing AppEnded if previous session crashed
-4. `DataService.RebuildDeviceSnapshots()` — recompute TotalUsage from event log
-5. Load historical devices/events from DB
-6. `UsbMonitorService.SetCurrentDevicesFromSystem()` — snapshot currently-connected devices, emit `ConnectionStarted` events
-7. Start WMI watchers for live device changes
+### Startup Sequence (See `App.OnStartup`, `UsbMonitorService`, and `RawInputService`)
+1. Register unhandled-exception cleanup hooks.
+2. Mutex check (single-instance enforcement).
+3. Resolve `RunInBackground` from `KEYPULSE_RUN_IN_BACKGROUND`.
+4. Build the DI container.
+5. Resolve `UsbMonitorService` (which also resolves `DataService`). During construction:
+   - database migrations run,
+   - SQLite WAL mode is enabled,
+   - `DataService.RecoverFromCrash()` backfills missing close events if needed,
+   - `DataService.RebuildDeviceSnapshots()` recomputes persisted `TotalUsage` and clears stale `SessionStartedAt`,
+   - historical `Devices` / `DeviceEvents` are loaded,
+   - the heartbeat timer starts.
+6. Show the main window immediately or initialize the tray icon, depending on background mode.
+7. Await `UsbMonitorService.StartAsync()`:
+   - `SetCurrentDevicesFromSystem()` writes `AppStarted`, snapshots currently connected HID devices, and emits `ConnectionStarted` for each one,
+   - then WMI watchers are started for live insert/remove events.
+8. Resolve `RawInputService` and call `Start()` to create the hidden message-only window and begin receiving `WM_INPUT`.
 
 ---
 
 ## Critical Patterns & Conventions
 
 ### Event Types & Lifecycle
-Four event categories defined in `Models/DeviceEvent.cs` and `EventTypeExtensions`:
-- **Opening** (device becomes active): `ConnectionStarted`, `Connected`, `Resumed`
-- **Closing** (device becomes inactive): `ConnectionEnded`, `Disconnected`, `Suspended`
-- **App-level** (no specific device): `AppStarted`, `AppEnded`
+Event types are defined in `Models/DeviceEvent.cs` and categorized by `EventTypeExtensions`:
+- **Opening**: `ConnectionStarted`, `Connected`
+- **Closing**: `ConnectionEnded`, `Disconnected`
+- **App-level**: `AppStarted`, `AppEnded`
 
-Device state machine: Use `IsOpeningEvent()`/`IsClosingEvent()` extensions for state logic. See `UsbMonitorService.AddDeviceEvent()`.
+Device state management is centralized in `UsbMonitorService.AddDeviceEvent()`:
+- opening events set `SessionStartedAt`
+- closing events commit elapsed time into stored usage and clear `SessionStartedAt`
+- app-level events are logged without touching per-device state
 
 ### Device Identification
 - **Format**: `USB\VID_xxxx&PID_xxxx` (parsed from WMI `DeviceID`)
@@ -62,12 +90,22 @@ Device state machine: Use `IsOpeningEvent()`/`IsClosingEvent()` extensions for s
 ### Property Binding & Threading
 - **ObservableObject** base class (in `Helpers/`) wraps `INotifyPropertyChanged`
 - Automatically marshals property changes to UI thread via `Application.Current.Dispatcher`
-- See `DeviceInfo` for example: `SessionStartedAt` setter triggers notifications for dependent properties (`IsActive`, `TotalUsage`)
-- **Important**: TotalUsage is **computed** while active; displays stored value + elapsed since `SessionStartedAt`
+- See `Models/Device.cs` for example: `SessionStartedAt` triggers dependent notifications for `IsConnected` and `TotalUsage`
+- **Important**: `IsConnected` and `IsActive` are different concepts:
+  - `IsConnected` means the device currently has an open connection session (`SessionStartedAt.HasValue`)
+  - `IsActive` is a transient raw-input hold-state flag used to highlight devices while keys/buttons are currently held
+- **Important**: `TotalUsage` is computed while connected; it displays the stored value plus elapsed time since `SessionStartedAt`
+
+### Raw Input Activity Semantics
+- `RawInputService` creates one in-memory bucket per `(DeviceId, Minute)`.
+- **Keyboard**: every key-down increments `Keystrokes`; key-up only updates hold state.
+- **Mouse buttons**: every button-down increments `MouseClicks`; button-up only updates hold state.
+- **Mouse movement**: movement is recorded as a set of second-of-minute values, then persisted as `MouseActiveSeconds` (0–60).
+- Completed minutes flush every 60 seconds; dispose/shutdown flushes the current partial minute as well.
 
 ### Duplicate Detection
 - WMI fires multiple insert events (~2-3) per physical USB connection
-- `_recentlyInsertedDevices` cache (with timeout cleared on removal) de-duplicates by collecting signals until ≥2 confirm device type
+- `_cachedDevices` de-duplicates by aggregating keyboard/mouse interface signals inside a short time window
 - Only then a single `Connected` event is recorded
 - `DeviceEvents` unique constraint prevents DB duplicates even if code fails
 
@@ -107,9 +145,9 @@ dotnet ef database update SomeOlderMigrationName
 
 | Folder | Purpose |
 |--------|---------|
-| `Helpers/` | `ObservableObject`, `RelayCommand`, `UsbDeviceClassifier`, `TimeFormatter`, `PowerShellScripts` |
-| `Services/` | `UsbMonitorService`, `DataService` — core logic |
-| `Models/` | `DeviceInfo`, `DeviceEvent` + enums/extensions |
+| `Helpers/` | `ObservableObject`, `RelayCommand`, `UsbDeviceClassifier`, `TimeFormatter`, `PowerShellScripts`, `HeartbeatFile` |
+| `Services/` | `UsbMonitorService`, `RawInputService`, `DataService` — monitoring, activity capture, persistence |
+| `Models/` | `Device`, `DeviceEvent`, `ActivitySnapshot` + enums/extensions |
 | `Data/` | `ApplicationDbContext`, database initialization |
 | `ViewModels/` | MVVM viewmodels for each UI view (e.g., `DeviceListViewModel`) |
 | `Views/` | XAML + code-behind for UI (e.g., `DeviceListView.xaml`) |
@@ -127,8 +165,8 @@ dotnet ef database update SomeOlderMigrationName
 3. Event log stays consistent for future usage calculations
 
 **Snapshot Rebuild** (`DataService.RebuildDeviceSnapshots`):
-- Recomputes `TotalUsage` and `LastConnectedAt` from event log
-- Clears runtime-only `SessionStartedAt` so Devices don't appear artificially active
+- Recomputes persisted `TotalUsage` from the event log
+- Clears runtime-only `SessionStartedAt` so devices do not appear connected after an unclean shutdown
 - Called at startup after recovery
 
 ---
@@ -138,13 +176,21 @@ dotnet ef database update SomeOlderMigrationName
 ### Duplicate Event Prevention
 - `DeviceInsertedEvent` accumulates keyboard/mouse signals until ≥2 are seen within a short timeframe
 - Only emits one `Connected` event per physical device insertion
-- DB unique constraint `(DeviceId, Timestamp, EventType)` is secondary safeguard
+- DB unique constraint `(DeviceId, EventTime, EventType)` is secondary safeguard
 
 ### CurrentSessionUsage ("Session" vs. "Total")
 - **SessionStartedAt**: Set when device becomes active (opening event), cleared when inactive
-- **IsActive**: Computed from `SessionStartedAt.HasValue`
+- **IsConnected**: Computed from `SessionStartedAt.HasValue`
+- **IsActive**: Separate transient hold-state driven by `RawInputService.ActivityStateChanged`
 - **TotalUsage**: Displays stored value + elapsed since SessionStartedAt (live tick while active)
 - Avoids stale timing from unclean shutdown; current session always starts fresh
+
+### ActivitySnapshots
+- One row represents one device during one minute.
+- `Keystrokes` counts key-down events.
+- `MouseClicks` counts mouse button-down events.
+- `MouseActiveSeconds` stores how many distinct seconds within the minute saw mouse movement.
+- The current code persists snapshots, but the main UI primarily exposes live connection/activity state and total usage rather than a dedicated activity-history view.
 
 ### Device Name Resolution
 - `PowershellScripts.GetDeviceName(deviceId)` queries registry (Windows device metadata)
@@ -167,6 +213,7 @@ dotnet ef database update SomeOlderMigrationName
 ## Key Files to Read First
 - `App.xaml.cs` → DI setup, startup/shutdown lifecycle
 - `Services/UsbMonitorService.cs` → WMI monitoring, event handling
+- `Services/RawInputService.cs` → per-device raw input capture and minute-bucket flushing
 - `Services/DataService.cs` → crash recovery, snapshot rebuild, event persistence
-- `Models/DeviceInfo.cs` + `Models/DeviceEvent.cs` → data model, event lifecycle
+- `Models/Device.cs`, `Models/DeviceEvent.cs`, `Models/ActivitySnapshot.cs` → persisted models and runtime state
 
