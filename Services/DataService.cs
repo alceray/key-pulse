@@ -279,6 +279,7 @@ public class DataService
             {
                 device.TotalUsage = ComputeTotalUsage(ctx, device.DeviceId);
                 device.SessionStartedAt = null;
+                device.LastSeenAt ??= GetLastDeviceEvent(device.DeviceId)?.EventTime;
             }
 
             ctx.SaveChanges();

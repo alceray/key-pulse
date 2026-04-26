@@ -38,15 +38,9 @@ public sealed class DashboardViewModel : ObservableObject, IDisposable
 
             _selectedRange = value;
             OnPropertyChanged();
-            OnPropertyChanged(nameof(KeystrokesLabel));
-            OnPropertyChanged(nameof(MouseClicksLabel));
             Refresh();
         }
     }
-
-    public string KeystrokesLabel => $"Keystrokes ({SelectedRange})";
-
-    public string MouseClicksLabel => $"Mouse Clicks ({SelectedRange})";
 
     public int SelectedBucketMinutes
     {
@@ -118,42 +112,42 @@ public sealed class DashboardViewModel : ObservableObject, IDisposable
 
     public string HoveredConnectionText => _hoverPreview.ConnectionText;
 
-    public int ActiveDevices
+    public int ConnectedDevices
     {
-        get => _activeDevices;
+        get => _connectedDevices;
         private set
         {
-            _activeDevices = value;
+            _connectedDevices = value;
             OnPropertyChanged();
         }
     }
 
-    public int Keystrokes24h
+    public string ConnectedDevicesBreakdown
     {
-        get => _keystrokes24h;
+        get => _connectedDevicesBreakdown;
         private set
         {
-            _keystrokes24h = value;
+            _connectedDevicesBreakdown = value;
             OnPropertyChanged();
         }
     }
 
-    public int MouseClicks24h
+    public string TopKeyboardsSummary
     {
-        get => _mouseClicks24h;
+        get => _topKeyboardsSummary;
         private set
         {
-            _mouseClicks24h = value;
+            _topKeyboardsSummary = value;
             OnPropertyChanged();
         }
     }
 
-    public TimeSpan TotalUsageAllTime
+    public string TopMiceSummary
     {
-        get => _totalUsageAllTime;
+        get => _topMiceSummary;
         private set
         {
-            _totalUsageAllTime = value;
+            _topMiceSummary = value;
             OnPropertyChanged();
         }
     }
@@ -171,10 +165,10 @@ public sealed class DashboardViewModel : ObservableObject, IDisposable
     private PlotModel _keyboardUsagePiePlot = new();
     private PlotModel _mouseUsagePiePlot = new();
     private PlotModel _inputActivityPlot = new();
-    private int _activeDevices;
-    private int _keystrokes24h;
-    private int _mouseClicks24h;
-    private TimeSpan _totalUsageAllTime = TimeSpan.Zero;
+    private int _connectedDevices;
+    private string _connectedDevicesBreakdown = "0 keyboards, 0 mice";
+    private string _topKeyboardsSummary = "1. -\n2. -\n3. -";
+    private string _topMiceSummary = "1. -\n2. -\n3. -";
     private string _lastUpdatedText = "";
     private string _selectedRange = "1 Week";
     private int _selectedBucketMinutes = 10;
@@ -190,7 +184,7 @@ public sealed class DashboardViewModel : ObservableObject, IDisposable
 
         RefreshCommand = new RelayCommand(_ => Refresh());
 
-        // Subscribe reactively so ActiveDevices updates the moment a device connects,
+        // Subscribe reactively so ConnectedDevices updates the moment a device connects,
         // even if the timer hasn't fired yet (fixes the 0-on-startup issue).
         _usbMonitorService.DeviceList.CollectionChanged += DeviceList_CollectionChanged;
         foreach (var device in _usbMonitorService.DeviceList)
@@ -235,7 +229,7 @@ public sealed class DashboardViewModel : ObservableObject, IDisposable
     private void Device_PropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(Device.IsConnected))
-            UpdateActiveDevicesCount();
+            Refresh();
     }
 
     private void DeviceList_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
@@ -247,13 +241,18 @@ public sealed class DashboardViewModel : ObservableObject, IDisposable
         if (e.OldItems != null)
             foreach (Device device in e.OldItems)
                 device.PropertyChanged -= Device_PropertyChanged;
-
-        UpdateActiveDevicesCount();
     }
 
-    private void UpdateActiveDevicesCount()
+    private void UpdateConnectedDevicesCount()
     {
-        ActiveDevices = _usbMonitorService.DeviceList.Count(d => d.IsConnected);
+        var connectedDevices = _usbMonitorService.DeviceList.Where(d => d.IsConnected).ToList();
+        ConnectedDevices = connectedDevices.Count;
+
+        var activeKeyboards = connectedDevices.Count(d => d.DeviceType == DeviceTypes.Keyboard);
+        var activeMice = connectedDevices.Count(d => d.DeviceType == DeviceTypes.Mouse);
+        var keyboardWord = activeKeyboards == 1 ? "keyboard" : "keyboards";
+        var mouseWord = activeMice == 1 ? "mouse" : "mice";
+        ConnectedDevicesBreakdown = $"{activeKeyboards} {keyboardWord}, {activeMice} {mouseWord}";
     }
 
     /// <summary>
@@ -271,20 +270,19 @@ public sealed class DashboardViewModel : ObservableObject, IDisposable
 
         var devices = _usbMonitorService.DeviceList.ToList();
 
-        UpdateActiveDevicesCount();
-        Keystrokes24h = snapshots.Sum(s => s.Keystrokes);
-        MouseClicks24h = snapshots.Sum(s => s.MouseClicks);
-        TotalUsageAllTime = TimeSpan.FromTicks(devices.Sum(d => d.TotalUsage.Ticks));
+        UpdateConnectedDevicesCount();
+        TopKeyboardsSummary = BuildTopUsageSummary(devices, DeviceTypes.Keyboard);
+        TopMiceSummary = BuildTopUsageSummary(devices, DeviceTypes.Mouse);
 
         var usageMinutesByDevice = DashboardUsageCalculator.ComputeUsageMinutesByDevice(events, from, to);
 
         var keyboardModel = DashboardPieChartBuilder.BuildUsagePiePlot(
-            title: $"Keyboard Usage ({SelectedRange})",
+            $"Keyboard Usage ({SelectedRange})",
             devices.Where(d => d.DeviceType == DeviceTypes.Keyboard),
             usageMinutesByDevice
         );
         var mouseModel = DashboardPieChartBuilder.BuildUsagePiePlot(
-            title: $"Mouse Usage ({SelectedRange})",
+            $"Mouse Usage ({SelectedRange})",
             devices.Where(d => d.DeviceType == DeviceTypes.Mouse),
             usageMinutesByDevice
         );
@@ -305,6 +303,31 @@ public sealed class DashboardViewModel : ObservableObject, IDisposable
         );
 
         LastUpdatedText = $"Last updated: {now:yyyy-MM-dd HH:mm:ss}";
+    }
+
+    private static string BuildTopUsageSummary(IEnumerable<Device> devices, DeviceTypes type)
+    {
+        var ranked = devices
+            .Where(d => d.DeviceType == type)
+            .OrderByDescending(d => d.TotalUsage)
+            .ThenBy(d => d.DeviceName)
+            .Take(3)
+            .ToList();
+
+        var lines = new List<string>(3);
+        for (var i = 0; i < 3; i++)
+        {
+            if (i >= ranked.Count)
+            {
+                lines.Add($"{i + 1}. -");
+                continue;
+            }
+
+            var device = ranked[i];
+            lines.Add($"{i + 1}. {device.DeviceName}");
+        }
+
+        return string.Join("\n", lines);
     }
 
     /// <summary>

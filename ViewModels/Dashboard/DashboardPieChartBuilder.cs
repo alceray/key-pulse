@@ -46,8 +46,8 @@ internal static class DashboardPieChartBuilder
             model.Series.Add(
                 new PieSeries
                 {
+                    Diameter = 0.95,
                     StrokeThickness = 1,
-                    InsideLabelPosition = 0.7,
                     AngleSpan = 360,
                     StartAngle = 0,
                     TrackerFormatString = "No usage data yet.",
@@ -63,8 +63,8 @@ internal static class DashboardPieChartBuilder
 
         var series = new PieSeries
         {
+            Diameter = 0.95,
             StrokeThickness = 1,
-            InsideLabelPosition = 0.7,
             AngleSpan = 360,
             StartAngle = 0,
             TrackerFormatString =

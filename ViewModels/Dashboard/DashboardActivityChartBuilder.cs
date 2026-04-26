@@ -30,13 +30,23 @@ internal static class DashboardActivityChartBuilder
 
         var model = new PlotModel { Title = $"Input Activity ({rangeLabel})" };
 
+        var rangeSpan = to - (from ?? to);
+        var monthsOnly = rangeSpan.TotalDays >= 365;
+        var datesOnly = !monthsOnly && rangeSpan.TotalDays >= 7;
+
         model.Axes.Add(
             new DateTimeAxis
             {
                 Position = AxisPosition.Bottom,
-                StringFormat = "MM-dd HH:mm",
+                StringFormat =
+                    monthsOnly ? "yyyy-MM"
+                    : datesOnly ? "MM-dd"
+                    : "MM-dd HH:mm",
                 Title = "Time",
-                IntervalType = DateTimeIntervalType.Hours,
+                IntervalType =
+                    monthsOnly ? DateTimeIntervalType.Months
+                    : datesOnly ? DateTimeIntervalType.Days
+                    : DateTimeIntervalType.Hours,
             }
         );
 
@@ -173,7 +183,7 @@ internal static class DashboardActivityChartBuilder
     /// </summary>
     private static DateTime ToBucketStart(DateTime minute, int bucketMinutes)
     {
-        var normalizedMinute = (minute.Minute / bucketMinutes) * bucketMinutes;
+        var normalizedMinute = minute.Minute / bucketMinutes * bucketMinutes;
         return new DateTime(minute.Year, minute.Month, minute.Day, minute.Hour, normalizedMinute, 0, minute.Kind);
     }
 
