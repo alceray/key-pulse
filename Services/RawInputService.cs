@@ -543,7 +543,7 @@ public class RawInputService : IDisposable
                     Minute = kvp.Key.Minute,
                     Keystrokes = kvp.Value.Keystrokes,
                     MouseClicks = kvp.Value.MouseClicks,
-                    MouseActiveSeconds = (byte)kvp.Value.ActiveMovementSeconds.Count,
+                    MouseMovementSeconds = (byte)kvp.Value.ActiveMovementSeconds.Count,
                 })
                 .ToList();
 

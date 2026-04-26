@@ -10,6 +10,12 @@ public class DataService
 {
     private readonly IDbContextFactory<ApplicationDbContext> _factory;
 
+    public sealed class DashboardEventQueryResult
+    {
+        public required IReadOnlyList<DeviceEvent> DeviceEvents { get; init; }
+        public required IReadOnlyList<DeviceEvent> AppLifecycleEvents { get; init; }
+    }
+
     public DataService(IDbContextFactory<ApplicationDbContext> factory)
     {
         _factory = factory;
@@ -57,6 +63,31 @@ public class DataService
     {
         using var ctx = _factory.CreateDbContext();
         return ctx.DeviceEvents.ToList().AsReadOnly();
+    }
+
+    /// <summary>
+    /// Returns dashboard-ready event sets ordered up to the requested end time.
+    /// </summary>
+    public DashboardEventQueryResult GetDashboardEvents(DateTime to)
+    {
+        using var ctx = _factory.CreateDbContext();
+
+        var allEvents = ctx
+            .DeviceEvents.Where(e => e.EventTime <= to)
+            .OrderBy(e => e.EventTime)
+            .ThenBy(e => e.DeviceEventId)
+            .ToList();
+
+        var deviceEvents = allEvents.Where(e => e.DeviceId != "" && !e.EventType.IsAppEvent()).ToList();
+        var appLifecycleEvents = allEvents
+            .Where(e => e.EventType == EventTypes.AppStarted || e.EventType == EventTypes.AppEnded)
+            .ToList();
+
+        return new DashboardEventQueryResult
+        {
+            DeviceEvents = deviceEvents.AsReadOnly(),
+            AppLifecycleEvents = appLifecycleEvents.AsReadOnly(),
+        };
     }
 
     public DeviceEvent? GetLastDeviceEvent(string? deviceId = null)
@@ -213,6 +244,7 @@ public class DataService
             .ToList();
 
         foreach (var deviceId in unbalancedDeviceIds)
+        {
             ctx.DeviceEvents.Add(
                 new DeviceEvent
                 {
@@ -221,6 +253,11 @@ public class DataService
                     EventTime = crashTime,
                 }
             );
+
+            var device = ctx.Devices.SingleOrDefault(d => d.DeviceId == deviceId);
+            if (device != null)
+                device.LastSeenAt = crashTime;
+        }
 
         ctx.DeviceEvents.Add(new DeviceEvent { EventType = EventTypes.AppEnded, EventTime = crashTime });
 

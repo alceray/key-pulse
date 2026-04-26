@@ -37,5 +37,5 @@ public class ActivitySnapshot
     /// Number of seconds within this minute (0–60) during which mouse movement was detected.
     /// Divide by 60.0 to get the fraction of the minute the mouse was active.
     /// </summary>
-    public byte MouseActiveSeconds { get; set; }
+    public byte MouseMovementSeconds { get; set; }
 }

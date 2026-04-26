@@ -33,6 +33,7 @@ public class Device : ObservableObject
     private TimeSpan _storedTotalUsage = TimeSpan.Zero;
     private DateTime? _sessionStartedAt;
     private DateTime? _lastConnectedAt;
+    private DateTime? _lastSeenAt;
     private bool _isActive;
 
     /// <summary>
@@ -132,12 +133,36 @@ public class Device : ObservableObject
     }
 
     /// <summary>
+    /// Raw timestamp of the last device lifecycle event seen for this device.
+    /// Persisted for fast dashboard reads.
+    /// </summary>
+    public DateTime? LastSeenAt
+    {
+        get => _lastSeenAt;
+        set
+        {
+            if (_lastSeenAt != value)
+            {
+                _lastSeenAt = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(LastSeenRelative));
+            }
+        }
+    }
+
+    /// <summary>
     /// Formatted relative time since last connection (e.g., "2 hours ago").
     /// Computed from the persisted raw timestamp.
     /// </summary>
     [NotMapped]
     public string LastConnectedRelative =>
         LastConnectedAt.HasValue ? TimeFormatter.ToRelativeTime(LastConnectedAt.Value) : "N/A";
+
+    /// <summary>
+    /// Formatted relative time since the last device event.
+    /// </summary>
+    [NotMapped]
+    public string LastSeenRelative => LastSeenAt.HasValue ? TimeFormatter.ToRelativeTime(LastSeenAt.Value) : "N/A";
 
     /// <summary>
     /// Whether a mouse click or keyboard stroke occurred recently (within activity hot window).
@@ -212,5 +237,6 @@ public class Device : ObservableObject
     {
         OnPropertyChanged(nameof(TotalUsage));
         OnPropertyChanged(nameof(LastConnectedRelative));
+        OnPropertyChanged(nameof(LastSeenRelative));
     }
 }

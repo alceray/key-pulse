@@ -7,11 +7,14 @@
   xmlns:views="clr-namespace:KeyPulse.Views"
   mc:Ignorable="d"
   Title="KeyPulse"
-  Height="600"
-  Width="800"
+  Height="1200"
+  Width="1600"
 >
   <Grid>
-    <TabControl>
+    <TabControl SelectedIndex="0">
+      <TabItem Header="Dashboard">
+        <views:DashboardView />
+      </TabItem>
       <TabItem Header="{Binding DataContext.DeviceTitleWithCount, ElementName=DeviceListViewControl}">
         <views:DeviceListView x:Name="DeviceListViewControl" />
       </TabItem>

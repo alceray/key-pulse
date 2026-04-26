@@ -111,6 +111,7 @@ public partial class App : System.Windows.Application
         services.AddSingleton<DataService>();
         services.AddSingleton<UsbMonitorService>();
         services.AddSingleton<RawInputService>();
+        services.AddTransient<DashboardViewModel>();
         services.AddTransient<DeviceListViewModel>();
         services.AddTransient<EventLogViewModel>();
     }

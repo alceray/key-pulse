@@ -104,6 +104,8 @@ public class UsbMonitorService : IDisposable
         });
 
         // Perform device state management based on event type
+        trackedDevice.LastSeenAt = deviceEvent.EventTime;
+
         if (deviceEvent.EventType.IsOpeningEvent())
         {
             trackedDevice.SessionStartedAt = deviceEvent.EventTime;
