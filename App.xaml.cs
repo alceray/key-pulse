@@ -20,6 +20,8 @@ public partial class App : System.Windows.Application
     private UsbMonitorService? _usbMonitorService;
     private RawInputService? _rawInputService;
     private static Mutex? _appMutex;
+    private EventWaitHandle? _activateEvent;
+    private RegisteredWaitHandle? _activateEventRegistration;
     private NotifyIcon? _trayIcon;
     private string? _appName;
     private static bool RunInBackground { get; set; }
@@ -46,18 +48,23 @@ public partial class App : System.Windows.Application
         _appMutex = new Mutex(true, _appName, out var canCreateApp);
         if (!canCreateApp)
         {
-            System.Windows.MessageBox.Show(
-                "The application is already running.",
-                _appName,
-                MessageBoxButton.OK,
-                MessageBoxImage.Information
-            );
+            if (!SignalExistingInstance(_appName))
+                System.Windows.MessageBox.Show(
+                    "The application is already running.",
+                    _appName,
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information
+                );
+
             Environment.Exit(0);
         }
 
-        // Resolve RunInBackground before services start so the value is stable.
-        RunInBackground =
-            bool.TryParse(Environment.GetEnvironmentVariable("KEYPULSE_RUN_IN_BACKGROUND"), out var result) && result;
+        InitializeActivationSignalListener();
+
+        // Resolve startup mode before services start so the value is stable.
+        // Default: Debug => foreground window, Release => tray/background.
+        // Launch args can force tray startup for packaging/startup-entry scenarios.
+        RunInBackground = ResolveRunInBackground(e.Args);
 
         var services = new ServiceCollection();
         ConfigureServices(services);
@@ -67,7 +74,9 @@ public partial class App : System.Windows.Application
 
         // Show window / tray immediately so the UI appears while slow startup runs in the background.
         if (RunInBackground)
+        {
             InitializeTrayIcon();
+        }
         else
         {
             MainWindow = new MainWindow();
@@ -88,6 +97,8 @@ public partial class App : System.Windows.Application
     {
         try
         {
+            _activateEventRegistration?.Unregister(null);
+            _activateEvent?.Dispose();
             _appMutex?.ReleaseMutex();
             _appMutex?.Dispose();
             _trayIcon?.Dispose();
@@ -116,6 +127,58 @@ public partial class App : System.Windows.Application
         services.AddTransient<EventLogViewModel>();
     }
 
+    private static bool ResolveRunInBackground(IEnumerable<string> args)
+    {
+        return ShouldForceTrayFromArgs(args) || IsProductionBuild();
+    }
+
+    private static bool IsProductionBuild()
+    {
+#if DEBUG
+        return false;
+#else
+        return true;
+#endif
+    }
+
+    private static bool ShouldForceTrayFromArgs(IEnumerable<string> args)
+    {
+        return args.Any(arg =>
+            string.Equals(arg, "--tray", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(arg, "--startup", StringComparison.OrdinalIgnoreCase)
+        );
+    }
+
+    private static string GetActivationEventName(string appName)
+    {
+        return $"{appName}.ACTIVATE";
+    }
+
+    private void InitializeActivationSignalListener()
+    {
+        _activateEvent = new EventWaitHandle(false, EventResetMode.AutoReset, GetActivationEventName(_appName!));
+        _activateEventRegistration = ThreadPool.RegisterWaitForSingleObject(
+            _activateEvent,
+            (_, _) => Dispatcher.BeginInvoke(new Action(ShowMainWindow)),
+            null,
+            Timeout.Infinite,
+            false
+        );
+    }
+
+    private static bool SignalExistingInstance(string appName)
+    {
+        try
+        {
+            using var activateEvent = EventWaitHandle.OpenExisting(GetActivationEventName(appName));
+            return activateEvent.Set();
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     private void InitializeTrayIcon()
     {
         _trayIcon = new NotifyIcon
@@ -142,13 +205,16 @@ public partial class App : System.Windows.Application
             MainWindow.Closing += MainWindow_Closing;
         }
 
-        if (!MainWindow.IsVisible)
-        {
-            MainWindow.Show();
+        if (MainWindow.WindowState == WindowState.Minimized)
             MainWindow.WindowState = WindowState.Normal;
-        }
 
-        var activated = MainWindow.Activate();
+        if (!MainWindow.IsVisible)
+            MainWindow.Show();
+
+        MainWindow.Topmost = true;
+        MainWindow.Topmost = false;
+        MainWindow.Activate();
+        MainWindow.Focus();
     }
 
     private void MainWindow_Closing(object? sender, CancelEventArgs e)
