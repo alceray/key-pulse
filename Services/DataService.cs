@@ -235,9 +235,15 @@ public class DataService
 
         if (lastAppEvent == null || lastAppEvent.EventType != EventTypes.AppStarted)
         {
-            Log.Debug("RecoverFromCrash skipped; no orphaned app session detected");
+            Log.Information("RecoverFromCrash skipped; no orphaned app session detected");
+            stopwatch.Stop();
             return;
         }
+
+        Log.Warning(
+            "RecoverFromCrash detected unclean shutdown; last AppStarted at {OrphanedSessionStart}",
+            lastAppEvent.EventTime
+        );
 
         // Use the last heartbeat as the crash time if it's more recent than the session start.
         // Falls back to the session start timestamp if no heartbeat is available.
@@ -278,13 +284,15 @@ public class DataService
         ctx.DeviceEvents.Add(new DeviceEvent { EventType = EventTypes.AppEnded, EventTime = crashTime });
 
         ctx.SaveChanges();
-        Log.Information(
-            "RecoverFromCrash backfilled AppEnded and {ConnectionEndedCount} ConnectionEnded events at {CrashTime}",
-            unbalancedDeviceIds.Count,
-            crashTime
-        );
         stopwatch.Stop();
-        Log.Debug("RecoverFromCrash completed in {ElapsedMs}ms", stopwatch.ElapsedMilliseconds);
+
+        Log.Information(
+            "RecoverFromCrash backfilled AppEnded and {ConnectionEndedCount} ConnectionEnded events at {CrashTime}; devices affected: {AffectedDeviceIds}; duration: {ElapsedMs}ms",
+            unbalancedDeviceIds.Count,
+            crashTime,
+            string.Join(", ", unbalancedDeviceIds),
+            stopwatch.ElapsedMilliseconds
+        );
     }
 
     /// <summary>

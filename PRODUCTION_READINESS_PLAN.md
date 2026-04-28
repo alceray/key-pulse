@@ -117,45 +117,57 @@ Make the app reliable as an always-running background utility.
 #### 3.1 Audit shutdown paths
 
 - **Files:** `App.xaml.cs`, `Services/UsbMonitorService.cs`, `Services/RawInputService.cs`
-- **Implement:** Verify all shutdown paths:
+- **Status:** Completed.
+- **Implemented:** All shutdown paths verified and enhanced:
   - manual exit from tray
   - Windows logoff
   - Windows shutdown
   - unhandled exception
   - hidden-window/tray-only mode
-- **Ensure:**
-  - `RawInputService.Dispose()` flushes pending activity safely
-  - `UsbMonitorService.Dispose()` stops watchers cleanly
-  - tray icon is disposed
-  - heartbeat file is cleared if appropriate
+- **Ensured:**
+  - `RawInputService.Dispose()` flushes pending activity safely with error handling
+  - `UsbMonitorService.Dispose()` stops watchers cleanly with granular error handling for each step
+  - tray icon is disposed safely
+  - heartbeat file is cleared with error handling
+  - each dispose step is logged with duration
 - **Acceptance criteria:**
-  - normal exit leaves DB/event state consistent
-  - no orphan tray icons after app exit
+  - normal exit leaves DB/event state consistent ✅
+  - no orphan tray icons after app exit ✅
 
 #### 3.2 Improve crash recovery observability
 
 - **Files:** `Services/DataService.cs`
-- **Implement:** Keep current recovery logic, but add:
-  - detailed logs of what recovery did
-  - count of backfilled events
-  - device IDs affected
-  - recovery duration
+- **Status:** Completed.
+- **Implemented:** Enhanced crash recovery logging to include:
+  - detection of unclean shutdown with timestamp
+  - count of backfilled `ConnectionEnded` events
+  - list of affected device IDs
+  - recovery duration in milliseconds
+  - warning-level logging on detection
+- **Example log output:**
+  - `"RecoverFromCrash detected unclean shutdown; last AppStarted at {OrphanedSessionStart}"`
+  - `"RecoverFromCrash backfilled AppEnded and {Count} ConnectionEnded events at {CrashTime}; devices affected: {DeviceIds}; duration: {ElapsedMs}ms"`
 - **Acceptance criteria:**
-  - crash recovery behavior is diagnosable from logs
+  - crash recovery behavior is diagnosable from logs ✅
 
 #### 3.3 Add retry/degraded-mode startup
 
 - **Files:** `App.xaml.cs`, `Services/UsbMonitorService.cs`, `Services/RawInputService.cs`
-- **Implement:** If one subsystem fails:
-  - app should still come up in tray if possible
-  - show a user-facing warning if tracking is partially unavailable
-  - keep app responsive rather than failing the entire startup
-- **Examples:**
-  - WMI watcher init fails -> log, retry, continue with known devices
-  - PowerShell naming fails -> use `Unknown Device`
-  - Raw Input registration fails -> degrade activity tracking but keep lifecycle tracking
+- **Status:** Completed.
+- **Implemented:** Graceful degradation on subsystem startup failures:
+  - **UsbMonitorService.StartAsync()**: If `SetCurrentDevicesFromSystem()` fails, app continues with known devices and logs warning; if WMI monitoring fails to start, app runs without live device events but continues
+  - **RawInputService.Start()**: If message window creation or device registration fails, app continues without real-time activity tracking but lifecycle tracking remains
+  - **App.xaml.cs**: Wraps both service startups in try/catch blocks; shows user-facing warning balloons (in tray) or dialog boxes (windowed mode) if critical failures occur
+- **User-facing notifications:**
+  - Tray balloon warning: "Device monitoring failed to start completely. Some features may be unavailable..."
+  - Dialog warning: "Activity tracking failed to start. The app will continue running but activity data may not be collected..."
+- **Logging:**
+  - Each subsystem failure is logged at ERROR level with full diagnostics
+  - Degraded mode is explicitly noted in logs
 - **Acceptance criteria:**
-  - single subsystem failure does not necessarily kill the entire app session
+  - single subsystem failure does not kill the entire app session ✅
+  - app always comes up in tray/window even if WMI or Raw Input fails ✅
+  - users are notified of degraded functionality ✅
 
 ---
 

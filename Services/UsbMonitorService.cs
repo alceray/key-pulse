@@ -1,5 +1,6 @@
 ﻿using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.Management;
 using System.Windows;
 using KeyPulse.Helpers;
@@ -56,15 +57,39 @@ public class UsbMonitorService : IDisposable
     /// <summary>
     /// Performs the slow startup work off the UI thread: WMI device snapshot and watcher setup.
     /// Must be called once after construction, before the app is considered ready.
+    /// Gracefully handles failures: if WMI snapshot fails, continues with known devices;
+    /// if WMI monitoring fails to start, logs warning but keeps app running.
     /// </summary>
     public async Task StartAsync()
     {
         Log.Information("UsbMonitorService startup begin");
+
         // SetCurrentDevicesFromSystem does WMI queries and PowerShell device-name lookups
         // which can take 1-3 seconds — run on a thread pool thread to keep the UI responsive.
         // Internal Dispatcher.Invoke calls marshal UI work back to the UI thread safely.
-        await Task.Run(SetCurrentDevicesFromSystem);
-        StartMonitoring();
+        try
+        {
+            await Task.Run(SetCurrentDevicesFromSystem);
+            Log.Debug("SetCurrentDevicesFromSystem completed successfully");
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "UsbMonitorService SetCurrentDevicesFromSystem failed; continuing with known devices");
+        }
+
+        try
+        {
+            StartMonitoring();
+            Log.Debug("WMI monitoring started successfully");
+        }
+        catch (Exception ex)
+        {
+            Log.Error(
+                ex,
+                "UsbMonitorService WMI monitoring failed to start; app running in degraded mode (live device events disabled)"
+            );
+        }
+
         Log.Information("UsbMonitorService startup completed");
     }
 
@@ -402,10 +427,29 @@ public class UsbMonitorService : IDisposable
         if (disposing)
         {
             Log.Information("UsbMonitorService dispose begin");
-            _heartbeatTimer.Dispose();
-            HeartbeatFile.Clear();
+            try
+            {
+                _heartbeatTimer.Dispose();
+                Log.Debug("Heartbeat timer disposed");
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "Error disposing heartbeat timer");
+            }
+
+            try
+            {
+                HeartbeatFile.Clear();
+                Log.Debug("Heartbeat file cleared");
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "Error clearing heartbeat file");
+            }
 
             var sessionTimestamp = DateTime.Now;
+            var disconnectedDeviceCount = 0;
+
             foreach (var device in DeviceList)
             {
                 if (device.IsConnected)
@@ -417,30 +461,55 @@ public class UsbMonitorService : IDisposable
                         EventTime = sessionTimestamp,
                     };
                     AddDeviceEvent(connectionEndedEvent, device);
+                    disconnectedDeviceCount++;
                 }
 
                 device.PropertyChanged -= Device_PropertyChanged;
             }
 
+            if (disconnectedDeviceCount > 0)
+                Log.Information(
+                    "Closed {DisconnectedDeviceCount} open device connections during shutdown",
+                    disconnectedDeviceCount
+                );
+
             AddDeviceEvent(new DeviceEvent { EventType = EventTypes.AppEnded, EventTime = sessionTimestamp });
 
-            if (_insertWatcher != null)
+            var wmiStopwatch = Stopwatch.StartNew();
+            try
             {
-                _insertWatcher.EventArrived -= DeviceInsertedEvent;
-                _insertWatcher.Stop();
-                _insertWatcher.Dispose();
-                _insertWatcher = null;
+                if (_insertWatcher != null)
+                {
+                    _insertWatcher.EventArrived -= DeviceInsertedEvent;
+                    _insertWatcher.Stop();
+                    _insertWatcher.Dispose();
+                    _insertWatcher = null;
+                    Log.Debug("Insert WMI watcher stopped and disposed");
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "Error stopping insert WMI watcher");
             }
 
-            if (_removeWatcher != null)
+            try
             {
-                _removeWatcher.EventArrived -= DeviceRemovedEvent;
-                _removeWatcher.Stop();
-                _removeWatcher.Dispose();
-                _removeWatcher = null;
+                if (_removeWatcher != null)
+                {
+                    _removeWatcher.EventArrived -= DeviceRemovedEvent;
+                    _removeWatcher.Stop();
+                    _removeWatcher.Dispose();
+                    _removeWatcher = null;
+                    Log.Debug("Remove WMI watcher stopped and disposed");
+                }
             }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "Error stopping remove WMI watcher");
+            }
+            wmiStopwatch.Stop();
 
-            Log.Information("UsbMonitorService dispose completed");
+            Log.Information("UsbMonitorService dispose completed in {ElapsedMs}ms", wmiStopwatch.ElapsedMilliseconds);
         }
 
         _disposed = true;

@@ -93,10 +93,33 @@ public partial class App : System.Windows.Application
         }
 
         // WMI device snapshot + watcher setup - awaited off the UI thread.
-        await _usbMonitorService.StartAsync();
+        // Failures here are logged but don't block; app continues in degraded mode.
+        try
+        {
+            await _usbMonitorService.StartAsync();
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "UsbMonitorService startup failed");
+            ShowStartupWarning(
+                "Device monitoring failed to start completely. Some features may be unavailable. Check logs for details."
+            );
+        }
 
         _rawInputService = ServiceProvider.GetRequiredService<RawInputService>();
-        _rawInputService.Start();
+
+        // RawInputService startup handles its own exceptions internally.
+        try
+        {
+            _rawInputService.Start();
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "RawInputService startup failed unexpectedly");
+            ShowStartupWarning(
+                "Activity tracking failed to start. The app will continue running but activity data may not be collected. Check logs for details."
+            );
+        }
 
         Log.Information("{AppName} startup completed", _appName);
         base.OnStartup(e);
@@ -244,6 +267,28 @@ public partial class App : System.Windows.Application
         };
 
         Log.Information("Tray icon initialized");
+    }
+
+    private void ShowStartupWarning(string message)
+    {
+        try
+        {
+            if (RunInBackground && _trayIcon != null)
+            {
+                _trayIcon.ShowBalloonTip(5000, "Startup Warning", message, ToolTipIcon.Warning);
+            }
+            else if (!RunInBackground && MainWindow != null)
+            {
+                MainWindow.Dispatcher.BeginInvoke(() =>
+                {
+                    System.Windows.MessageBox.Show(message, _appName, MessageBoxButton.OK, MessageBoxImage.Warning);
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Failed to show startup warning");
+        }
     }
 
     private void ShowMainWindow()

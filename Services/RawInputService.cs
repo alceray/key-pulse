@@ -1,4 +1,5 @@
-﻿using System.Runtime.InteropServices;
+﻿using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
 using KeyPulse.Helpers;
@@ -195,30 +196,52 @@ public class RawInputService : IDisposable
     /// <summary>
     /// Creates the hidden message-only window and registers Raw Input devices.
     /// Must be called on the WPF UI dispatcher thread after the application has started.
+    /// If registration fails, logs a warning and continues in a degraded mode (activity tracking disabled).
     /// </summary>
     public void Start()
     {
         Log.Information("RawInputService startup begin");
-        Application.Current.Dispatcher.Invoke(() =>
+        try
         {
-            // HWND_MESSAGE (-3) parent → invisible, message-only window; no taskbar entry.
-            var parameters = new HwndSourceParameters("KeyPulse_RawInput")
+            Application.Current.Dispatcher.Invoke(() =>
             {
-                Width = 0,
-                Height = 0,
-                WindowStyle = 0,
-                ParentWindow = new IntPtr(-3),
-            };
+                try
+                {
+                    // HWND_MESSAGE (-3) parent → invisible, message-only window; no taskbar entry.
+                    var parameters = new HwndSourceParameters("KeyPulse_RawInput")
+                    {
+                        Width = 0,
+                        Height = 0,
+                        WindowStyle = 0,
+                        ParentWindow = new IntPtr(-3),
+                    };
 
-            _hwndSource = new HwndSource(parameters);
-            _hwndSource.AddHook(WndProc);
+                    _hwndSource = new HwndSource(parameters);
+                    _hwndSource.AddHook(WndProc);
 
-            RegisterDevices(_hwndSource.Handle);
-            Log.Debug(
-                "RawInputService message window created: Handle=0x{WindowHandle:X}",
-                _hwndSource.Handle.ToInt64()
-            );
-        });
+                    RegisterDevices(_hwndSource.Handle);
+                    Log.Debug(
+                        "RawInputService message window created: Handle=0x{WindowHandle:X}",
+                        _hwndSource.Handle.ToInt64()
+                    );
+                }
+                catch (Exception ex)
+                {
+                    Log.Error(
+                        ex,
+                        "RawInputService failed to create message window or register devices; running in degraded mode (no per-device activity tracking)"
+                    );
+                    _hwndSource?.Dispose();
+                    _hwndSource = null;
+                    throw;
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "RawInputService startup failed; app will function without real-time activity tracking");
+        }
+
         Log.Information("RawInputService startup completed");
     }
 
@@ -577,29 +600,55 @@ public class RawInputService : IDisposable
 
         Log.Information("RawInputService dispose begin");
 
-        _flushTimer.Dispose();
+        var disposeStopwatch = Stopwatch.StartNew();
+
+        try
+        {
+            _flushTimer.Dispose();
+            Log.Debug("Flush timer disposed");
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Error disposing flush timer");
+        }
 
         // Flush any remaining data (including the current partial minute).
         try
         {
+            int flushedBucketCount = 0;
+            lock (_lock)
+            {
+                flushedBucketCount = _buckets.Count;
+            }
+
             FlushAllMinutes();
+            Log.Information("Flushed {FlushedBucketCount} pending activity buckets on shutdown", flushedBucketCount);
         }
         catch (Exception ex)
         {
             Log.Error(ex, "RawInputService flush on dispose failed");
         }
 
-        Application.Current?.Dispatcher.Invoke(() =>
+        try
         {
-            if (_hwndSource != null)
+            Application.Current?.Dispatcher.Invoke(() =>
             {
-                _hwndSource.RemoveHook(WndProc);
-                _hwndSource.Dispose();
-                _hwndSource = null;
-            }
-        });
+                if (_hwndSource != null)
+                {
+                    _hwndSource.RemoveHook(WndProc);
+                    _hwndSource.Dispose();
+                    _hwndSource = null;
+                    Log.Debug("Message-only window disposed");
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Error disposing message window");
+        }
 
-        Log.Information("RawInputService dispose completed");
+        disposeStopwatch.Stop();
+        Log.Information("RawInputService dispose completed in {ElapsedMs}ms", disposeStopwatch.ElapsedMilliseconds);
 
         GC.SuppressFinalize(this);
     }
