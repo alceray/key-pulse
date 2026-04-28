@@ -84,9 +84,9 @@ Startup mode defaults by build configuration:
 - `Debug`: opens main window on launch (foreground mode).
 - `Release`: starts with tray icon (background mode).
 
-Launch argument overrides:
+Launch argument override:
 
-- `--tray` or `--startup`
+- `--startup`
     - forces tray/background startup for that launch (useful for startup entries and installer shortcuts).
 
 ## Troubleshooting

@@ -1,3 +1,14 @@
-﻿namespace KeyPulse.Views;
+﻿using System.Windows.Controls;
+using KeyPulse.ViewModels;
+using Microsoft.Extensions.DependencyInjection;
 
-internal class SettingsView { }
+namespace KeyPulse.Views;
+
+public partial class SettingsView : UserControl
+{
+    public SettingsView()
+    {
+        InitializeComponent();
+        DataContext = App.ServiceProvider.GetRequiredService<SettingsViewModel>();
+    }
+}

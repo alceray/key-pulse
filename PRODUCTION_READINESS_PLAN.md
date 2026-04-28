@@ -13,14 +13,14 @@ Make startup behavior deterministic and aligned with intended product behavior.
 - **Files:** `App.xaml.cs`
 - **Status:** Completed.
 - **Implemented:** Startup mode resolution centralized in `ResolveRunInBackground()` with clear precedence:
-  1. launch arguments `--tray` or `--startup` force tray mode for that process
+  1. launch argument `--startup` forces tray mode for that process
   2. otherwise build default applies:
     - `Debug` => foreground window
     - `Release` => tray/background
 - **Acceptance criteria:**
   - `Debug` launches foreground by default ✅
   - `Release` launches tray by default ✅
-  - `--tray` / `--startup` consistently force tray in both build configs ✅
+  - `--startup` consistently forces tray in both build configs ✅
 
 #### 1.2 Define "auto-start launch behavior"
 
@@ -32,7 +32,7 @@ Make startup behavior deterministic and aligned with intended product behavior.
     - initializes tray icon immediately
     - begins startup work in background
     - exposes UI only via tray click/menu
-  - Startup entry arguments (`--startup` or `--tray`) force tray-first behavior
+  - Startup entry argument (`--startup`) forces tray-first behavior
 - **Acceptance criteria:**
   - app starts silently in tray after login ✅
   - no disruptive main window popup at boot ✅
@@ -171,7 +171,7 @@ Make the app reliable as an always-running background utility.
 
 ---
 
-## Phase 4 - Implement "Start with Windows"
+## Phase 4 - Implement "Launch on Login"
 
 ### Goal
 
@@ -182,33 +182,38 @@ Support reliable auto-start at user logon.
 #### 4.1 Add an autostart abstraction
 
 - **Files:** new file (e.g. `Services/StartupRegistrationService.cs`), optional settings model/viewmodel files
-- **Implement:** Add methods such as:
+- **Status:** Completed.
+- **Implemented:** Added startup abstraction via `IStartupRegistrationService` + `StartupRegistrationService` with methods:
   - `bool IsEnabled()`
   - `void Enable()`
   - `void Disable()`
-- **Preferred implementation:** per-user registry key `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`
-- **Note:** Command should point to installed exe and include optional background/startup argument if needed.
+- **Implementation details:**
+  - uses per-user registry key `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`
+  - startup command is the quoted current executable path
+  - always includes `--startup` for login launch behavior
 - **Acceptance criteria:**
-  - app can enable/disable start-with-Windows for current user
+  - app can enable/disable launch-on-login for current user ✅
 
-#### 4.2 Add a setting for "Start with Windows"
+#### 4.2 Add a setting for "Launch on Login"
 
 - **Files:** settings model/service (new), relevant view/viewmodel if exposed in UI
-- **Implement:** Persist a user-facing preference for:
+- **Status:** Completed.
+- **Implemented:** Added persisted settings through `AppUserSettings` + `AppSettingsService` under `%AppData%\KeyPulse\settings.json`.
+- **Persisted preferences:**
   - launch at login
-  - optionally "start minimized to tray"
+- **UX wiring:** Added synced tray + settings-tab toggle behavior with shared settings updates in `App.xaml.cs`.
 - **Acceptance criteria:**
-  - user can toggle startup behavior without editing config manually
+  - user can toggle startup behavior without editing config manually ✅
 
 #### 4.3 Support explicit startup arguments
 
 - **Files:** `App.xaml.cs`
-- **Implement:** Support launch arguments:
-  - `--tray`
+- **Status:** Completed.
+- **Implemented:** Startup argument support is active in `ResolveRunInBackground()` / `ShouldForceTrayFromArgs()`:
   - `--startup`
-- **Use:** force tray launch when invoked from the Run key.
+- **Use:** startup registration always writes `--startup` for login launches.
 - **Acceptance criteria:**
-  - auto-start can reliably start hidden/tray mode regardless of default app launch behavior
+  - auto-start can reliably start hidden/tray mode regardless of default app launch behavior ✅
 
 ---
 
@@ -272,7 +277,7 @@ Make the app manageable for real users.
 
 - **Files:** likely new settings view/viewmodel; maybe `MainWindow.xaml` / settings page
 - **Settings to add:**
-  - Start with Windows
+  - Launch on Login
   - Run in background / start minimized to tray
   - Open window on launch
   - Optional log level
@@ -285,7 +290,7 @@ Make the app manageable for real users.
 - **Files:** `App.xaml.cs`
 - **Add tray menu items:**
   - Open
-  - Start with Windows (toggle)
+  - Launch on Login (toggle)
   - Run in background (toggle)
   - Open logs folder
   - Exit
@@ -421,8 +426,8 @@ Support long-term maintenance.
 ### Milestone 2 - Auto-start
 
 - startup registration service
-- `--startup` / `--tray` argument support
-- UI toggle for Start with Windows
+- `--startup` argument support
+- UI toggle for Launch on Login
 
 ### Milestone 3 - Packaging
 
@@ -445,7 +450,7 @@ Support long-term maintenance.
 KeyPulse is production-ready when all of these are true:
 
 - installs via a real installer
-- can enable/disable "Start with Windows"
+- can enable/disable "Launch on Login"
 - starts silently to tray at login
 - logs operational issues to disk
 - survives crashes and reboots with consistent DB state

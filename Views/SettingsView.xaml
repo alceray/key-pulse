@@ -1,4 +1,32 @@
-﻿<ResourceDictionary
+﻿<UserControl
+  x:Class="KeyPulse.Views.SettingsView"
   xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
   xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-></ResourceDictionary>
+  Height="Auto"
+  Width="Auto"
+>
+  <Grid Margin="16">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="*" />
+    </Grid.RowDefinitions>
+
+    <TextBlock Grid.Row="0" Text="Startup Settings" FontSize="18" FontWeight="Bold" Margin="0,0,0,12" />
+
+    <CheckBox
+      Grid.Row="1"
+      Content="Launch on Login"
+      IsChecked="{Binding LaunchOnLogin, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+      Margin="0,0,0,10"
+    />
+
+    <StackPanel Grid.Row="2" Orientation="Horizontal">
+      <Button Content="Save" Width="100" Margin="0,0,8,0" Command="{Binding SaveSettingsCommand}" />
+      <Button Content="Reload" Width="100" Command="{Binding ReloadSettingsCommand}" />
+    </StackPanel>
+
+    <TextBlock Grid.Row="3" Text="{Binding StatusMessage}" Margin="0,12,0,0" Foreground="DimGray" />
+  </Grid>
+</UserControl>

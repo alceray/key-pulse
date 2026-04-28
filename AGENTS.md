@@ -176,7 +176,7 @@ dotnet ef database update SomeOlderMigrationName
 ### Configuration
 
 - **Build mode default**: Debug launches windowed; Release launches to tray/background
-- **Launch args**: `--tray` / `--startup` force tray/background startup for that process
+- **Launch args**: `--startup` forces tray/background startup for that process
 - Tray icon created if background mode enabled; main window created on-demand or at startup
 
 ### Build & Run

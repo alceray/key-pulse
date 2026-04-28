@@ -21,6 +21,9 @@
       <TabItem Header="Event Log">
         <views:EventLogView />
       </TabItem>
+      <TabItem Header="Settings">
+        <views:SettingsView />
+      </TabItem>
     </TabControl>
   </Grid>
 </Window>

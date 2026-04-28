@@ -5,6 +5,7 @@ using System.Reflection;
 using System.Windows;
 using System.Windows.Forms;
 using KeyPulse.Data;
+using KeyPulse.Models;
 using KeyPulse.Services;
 using KeyPulse.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
@@ -23,7 +24,10 @@ public partial class App : System.Windows.Application
     private EventWaitHandle? _activateEvent;
     private RegisteredWaitHandle? _activateEventRegistration;
     private NotifyIcon? _trayIcon;
+    private ToolStripMenuItem? _launchOnLoginMenuItem;
     private string? _appName;
+    private AppSettingsService? _appSettingsService;
+    private StartupRegistrationService? _startupRegistrationService;
     private static bool RunInBackground { get; set; }
     public static ServiceProvider ServiceProvider { get; private set; } = null!;
 
@@ -77,6 +81,11 @@ public partial class App : System.Windows.Application
         var services = new ServiceCollection();
         ConfigureServices(services);
         ServiceProvider = services.BuildServiceProvider();
+
+        _appSettingsService = ServiceProvider.GetRequiredService<AppSettingsService>();
+        _startupRegistrationService = ServiceProvider.GetRequiredService<StartupRegistrationService>();
+        _appSettingsService.SettingsChanged += OnAppSettingsChanged;
+        SyncStartupRegistrationFromSettings();
 
         _usbMonitorService = ServiceProvider.GetRequiredService<UsbMonitorService>();
 
@@ -132,6 +141,8 @@ public partial class App : System.Windows.Application
         {
             _activateEventRegistration?.Unregister(null);
             _activateEvent?.Dispose();
+            if (_appSettingsService != null)
+                _appSettingsService.SettingsChanged -= OnAppSettingsChanged;
             _appMutex?.ReleaseMutex();
             _appMutex?.Dispose();
             _trayIcon?.Dispose();
@@ -155,11 +166,14 @@ public partial class App : System.Windows.Application
     {
         services.AddDbContextFactory<ApplicationDbContext>();
         services.AddSingleton<DataService>();
+        services.AddSingleton<AppSettingsService>();
+        services.AddSingleton<StartupRegistrationService>();
         services.AddSingleton<UsbMonitorService>();
         services.AddSingleton<RawInputService>();
         services.AddTransient<DashboardViewModel>();
         services.AddTransient<DeviceListViewModel>();
         services.AddTransient<EventLogViewModel>();
+        services.AddTransient<SettingsViewModel>();
     }
 
     private static bool ResolveRunInBackground(IEnumerable<string> args)
@@ -178,10 +192,7 @@ public partial class App : System.Windows.Application
 
     private static bool ShouldForceTrayFromArgs(IEnumerable<string> args)
     {
-        return args.Any(arg =>
-            string.Equals(arg, "--tray", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(arg, "--startup", StringComparison.OrdinalIgnoreCase)
-        );
+        return args.Any(arg => string.Equals(arg, "--startup", StringComparison.OrdinalIgnoreCase));
     }
 
     private static string GetActivationEventName(string appName)
@@ -251,6 +262,8 @@ public partial class App : System.Windows.Application
 
     private void InitializeTrayIcon()
     {
+        var settings = _appSettingsService?.GetSettings() ?? new AppUserSettings();
+
         _trayIcon = new NotifyIcon
         {
             Icon = new Icon(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Assets", "keyboard_mouse_icon.ico")),
@@ -259,6 +272,15 @@ public partial class App : System.Windows.Application
             ContextMenuStrip = new ContextMenuStrip(),
         };
         _trayIcon.ContextMenuStrip.Items.Add("Open", null, (_, _) => ShowMainWindow());
+
+        _launchOnLoginMenuItem = new ToolStripMenuItem("Launch on Login")
+        {
+            CheckOnClick = true,
+            Checked = settings.LaunchOnLogin,
+        };
+        _launchOnLoginMenuItem.Click += (_, _) => ToggleLaunchOnLogin();
+        _trayIcon.ContextMenuStrip.Items.Add(_launchOnLoginMenuItem);
+
         _trayIcon.ContextMenuStrip.Items.Add("Exit", null, (_, _) => Shutdown());
         _trayIcon.MouseClick += (_, args) =>
         {
@@ -267,6 +289,71 @@ public partial class App : System.Windows.Application
         };
 
         Log.Information("Tray icon initialized");
+    }
+
+    private void SyncStartupRegistrationFromSettings()
+    {
+        if (_appSettingsService == null || _startupRegistrationService == null)
+            return;
+
+        try
+        {
+            var settings = _appSettingsService.GetSettings();
+            if (settings.LaunchOnLogin)
+                _startupRegistrationService.Enable();
+            else
+                _startupRegistrationService.Disable();
+
+            ApplySettingsToTrayMenu(settings);
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Failed to synchronize startup registration from settings");
+            ShowStartupWarning("Launch on Login could not be synchronized. Check logs for details.");
+        }
+    }
+
+    private void ToggleLaunchOnLogin()
+    {
+        if (_appSettingsService == null || _startupRegistrationService == null || _launchOnLoginMenuItem == null)
+            return;
+
+        var enabled = _launchOnLoginMenuItem.Checked;
+
+        try
+        {
+            var settings = _appSettingsService.GetSettings();
+            settings.LaunchOnLogin = enabled;
+            _appSettingsService.SaveSettings(settings);
+
+            if (enabled)
+                _startupRegistrationService.Enable();
+            else
+                _startupRegistrationService.Disable();
+
+            ApplySettingsToTrayMenu(settings);
+
+            Log.Information("Launch on Login updated: Enabled={Enabled}", enabled);
+        }
+        catch (Exception ex)
+        {
+            _launchOnLoginMenuItem.Checked = !enabled;
+            Log.Error(ex, "Failed to update Launch on Login setting");
+            ShowStartupWarning("Could not update Launch on Login. Check logs for details.");
+        }
+    }
+
+    private void OnAppSettingsChanged(AppUserSettings settings)
+    {
+        ApplySettingsToTrayMenu(settings);
+    }
+
+    private void ApplySettingsToTrayMenu(AppUserSettings settings)
+    {
+        if (_launchOnLoginMenuItem == null)
+            return;
+
+        Dispatcher.BeginInvoke(() => _launchOnLoginMenuItem.Checked = settings.LaunchOnLogin);
     }
 
     private void ShowStartupWarning(string message)
