@@ -2,31 +2,161 @@
   x:Class="KeyPulse.Views.SettingsView"
   xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
   xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+  xmlns:iconPacks="http://metro.mahapps.com/winfx/xaml/iconpacks"
   Height="Auto"
   Width="Auto"
 >
   <Grid Margin="16">
+    <Grid.ColumnDefinitions>
+      <ColumnDefinition Width="2*" />
+      <ColumnDefinition Width="{Binding LogsColumnWidth}" MinWidth="0" />
+    </Grid.ColumnDefinitions>
     <Grid.RowDefinitions>
-      <RowDefinition Height="Auto" />
-      <RowDefinition Height="Auto" />
-      <RowDefinition Height="Auto" />
       <RowDefinition Height="*" />
     </Grid.RowDefinitions>
 
-    <TextBlock Grid.Row="0" Text="Startup Settings" FontSize="18" FontWeight="Bold" Margin="0,0,0,12" />
+    <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,16,0">
+      <TextBlock Text="Settings" FontSize="18" FontWeight="Bold" Margin="0,0,0,12" />
 
-    <CheckBox
-      Grid.Row="1"
-      Content="Launch on Login"
-      IsChecked="{Binding LaunchOnLogin, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-      Margin="0,0,0,10"
-    />
+      <CheckBox
+        Content="Launch on Login"
+        IsChecked="{Binding LaunchOnLogin, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+        Margin="0,0,0,10"
+      />
 
-    <StackPanel Grid.Row="2" Orientation="Horizontal">
-      <Button Content="Save" Width="100" Margin="0,0,8,0" Command="{Binding SaveSettingsCommand}" />
-      <Button Content="Reload" Width="100" Command="{Binding ReloadSettingsCommand}" />
+      <CheckBox Content="{Binding LogsButtonText}" IsChecked="{Binding IsLogsVisible, Mode=TwoWay}" Margin="0,0,0,10" />
     </StackPanel>
 
-    <TextBlock Grid.Row="3" Text="{Binding StatusMessage}" Margin="0,12,0,0" Foreground="DimGray" />
+    <Grid Grid.Row="0" Grid.Column="1">
+      <Grid.RowDefinitions>
+        <RowDefinition Height="Auto" />
+        <RowDefinition Height="Auto" />
+        <RowDefinition Height="*" />
+      </Grid.RowDefinitions>
+
+      <!-- Logs section header -->
+
+      <Grid Grid.Row="1" Margin="0,0,0,8">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="*" />
+          <ColumnDefinition Width="Auto" />
+          <ColumnDefinition Width="Auto" />
+          <ColumnDefinition Width="Auto" />
+          <ColumnDefinition Width="Auto" />
+          <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
+
+        <ComboBox
+          Grid.Column="0"
+          ItemsSource="{Binding LogFiles}"
+          SelectedItem="{Binding SelectedLogFile, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+          HorizontalContentAlignment="Center"
+          VerticalContentAlignment="Center"
+        />
+
+        <!-- Filter dropdown -->
+        <Grid Grid.Column="1" Margin="8,0,0,0">
+          <ToggleButton x:Name="FilterToggle" Width="36" Height="32" VerticalAlignment="Center" ToolTip="Filters">
+            <iconPacks:PackIconPhosphorIcons Kind="Funnel" Width="16" Height="16" />
+          </ToggleButton>
+          <Popup
+            IsOpen="{Binding IsChecked, ElementName=FilterToggle, Mode=TwoWay}"
+            StaysOpen="False"
+            PlacementTarget="{Binding ElementName=FilterToggle}"
+            Placement="Bottom"
+            MinWidth="{Binding ActualWidth, ElementName=FilterToggle}"
+          >
+            <Border
+              Background="{DynamicResource {x:Static SystemColors.WindowBrushKey}}"
+              BorderBrush="#66000000"
+              BorderThickness="1"
+              Padding="4,4"
+            >
+              <ItemsControl ItemsSource="{Binding LogFilters}" Focusable="False">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate>
+                    <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay}" Padding="6,3" Margin="2,1">
+                      <TextBlock>
+                        <Run Text="{Binding Name, Mode=OneWay}" />
+                        <Run Text="(" />
+                        <Run Text="{Binding Count, Mode=OneWay}" />
+                        <Run Text=")" />
+                      </TextBlock>
+                    </CheckBox>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </Border>
+          </Popup>
+        </Grid>
+
+        <!-- Refresh -->
+        <Button
+          Grid.Column="2"
+          Width="36"
+          Height="32"
+          Margin="8,0,0,0"
+          Command="{Binding RefreshLogsCommand}"
+          ToolTip="Refresh Logs"
+        >
+          <iconPacks:PackIconPhosphorIcons Kind="ArrowsClockwise" Width="16" Height="16" />
+        </Button>
+
+        <!-- Copy -->
+        <Button
+          Grid.Column="3"
+          Width="36"
+          Height="32"
+          Margin="4,0,0,0"
+          Command="{Binding CopyLogsCommand}"
+          ToolTip="Copy Logs"
+        >
+          <iconPacks:PackIconPhosphorIcons Kind="Copy" Width="16" Height="16" />
+        </Button>
+
+        <!-- Open Folder -->
+        <Button
+          Grid.Column="4"
+          Width="36"
+          Height="32"
+          Margin="4,0,0,0"
+          Command="{Binding OpenLogsFolderCommand}"
+          ToolTip="Open Logs Folder"
+        >
+          <iconPacks:PackIconPhosphorIcons Kind="FolderOpen" Width="16" Height="16" />
+        </Button>
+      </Grid>
+
+      <Border Grid.Row="2" BorderBrush="#33000000" BorderThickness="1" CornerRadius="4" Padding="8">
+        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
+          <TextBox
+            Text="{Binding LogContent, Mode=OneWay}"
+            IsReadOnly="True"
+            TextWrapping="NoWrap"
+            BorderThickness="0"
+            Background="Transparent"
+            FontFamily="Consolas"
+            FontSize="12"
+            AcceptsReturn="True"
+            AcceptsTab="True"
+          />
+        </ScrollViewer>
+      </Border>
+    </Grid>
+
+    <!-- Toast notification -->
+    <Border
+      Grid.ColumnSpan="2"
+      HorizontalAlignment="Left"
+      VerticalAlignment="Bottom"
+      Margin="0,0,0,8"
+      Padding="14,8"
+      CornerRadius="6"
+      Background="#CC1b1b1b"
+      IsHitTestVisible="False"
+      Visibility="{Binding StatusVisibility}"
+    >
+      <TextBlock Text="{Binding StatusMessage}" Foreground="White" FontSize="13" />
+    </Border>
   </Grid>
 </UserControl>

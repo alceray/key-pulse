@@ -27,6 +27,7 @@ public partial class App : System.Windows.Application
     private ToolStripMenuItem? _launchOnLoginMenuItem;
     private string? _appName;
     private AppSettingsService? _appSettingsService;
+    private LogAccessService? _logAccessService;
     private StartupRegistrationService? _startupRegistrationService;
     private static bool RunInBackground { get; set; }
     public static ServiceProvider ServiceProvider { get; private set; } = null!;
@@ -72,19 +73,19 @@ public partial class App : System.Windows.Application
 
         InitializeActivationSignalListener();
 
-        // Resolve startup mode before services start so the value is stable.
-        // Default: Debug => foreground window, Release => tray/background.
-        // Launch args can force tray startup for packaging/startup-entry scenarios.
-        RunInBackground = ResolveRunInBackground(e.Args);
-        Log.Information("Startup mode resolved: RunInBackground={RunInBackground}", RunInBackground);
-
         var services = new ServiceCollection();
         ConfigureServices(services);
         ServiceProvider = services.BuildServiceProvider();
 
         _appSettingsService = ServiceProvider.GetRequiredService<AppSettingsService>();
+        _logAccessService = ServiceProvider.GetRequiredService<LogAccessService>();
         _startupRegistrationService = ServiceProvider.GetRequiredService<StartupRegistrationService>();
         _appSettingsService.SettingsChanged += OnAppSettingsChanged;
+
+        // Resolve startup mode with precedence: launch args > build default.
+        RunInBackground = ResolveRunInBackground(e.Args);
+        Log.Information("Startup mode resolved: RunInBackground={RunInBackground}", RunInBackground);
+
         SyncStartupRegistrationFromSettings();
 
         _usbMonitorService = ServiceProvider.GetRequiredService<UsbMonitorService>();
@@ -167,6 +168,7 @@ public partial class App : System.Windows.Application
         services.AddDbContextFactory<ApplicationDbContext>();
         services.AddSingleton<DataService>();
         services.AddSingleton<AppSettingsService>();
+        services.AddSingleton<LogAccessService>();
         services.AddSingleton<StartupRegistrationService>();
         services.AddSingleton<UsbMonitorService>();
         services.AddSingleton<RawInputService>();
@@ -361,16 +363,12 @@ public partial class App : System.Windows.Application
         try
         {
             if (RunInBackground && _trayIcon != null)
-            {
                 _trayIcon.ShowBalloonTip(5000, "Startup Warning", message, ToolTipIcon.Warning);
-            }
             else if (!RunInBackground && MainWindow != null)
-            {
                 MainWindow.Dispatcher.BeginInvoke(() =>
                 {
                     System.Windows.MessageBox.Show(message, _appName, MessageBoxButton.OK, MessageBoxImage.Warning);
                 });
-            }
         }
         catch (Exception ex)
         {

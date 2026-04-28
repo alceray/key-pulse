@@ -155,12 +155,16 @@ Make the app reliable as an always-running background utility.
 - **Files:** `App.xaml.cs`, `Services/UsbMonitorService.cs`, `Services/RawInputService.cs`
 - **Status:** Completed.
 - **Implemented:** Graceful degradation on subsystem startup failures:
-  - **UsbMonitorService.StartAsync()**: If `SetCurrentDevicesFromSystem()` fails, app continues with known devices and logs warning; if WMI monitoring fails to start, app runs without live device events but continues
-  - **RawInputService.Start()**: If message window creation or device registration fails, app continues without real-time activity tracking but lifecycle tracking remains
-  - **App.xaml.cs**: Wraps both service startups in try/catch blocks; shows user-facing warning balloons (in tray) or dialog boxes (windowed mode) if critical failures occur
+  - **UsbMonitorService.StartAsync()**: If `SetCurrentDevicesFromSystem()` fails, app continues with known devices and
+    logs warning; if WMI monitoring fails to start, app runs without live device events but continues
+  - **RawInputService.Start()**: If message window creation or device registration fails, app continues without
+    real-time activity tracking but lifecycle tracking remains
+  - **App.xaml.cs**: Wraps both service startups in try/catch blocks; shows user-facing warning balloons (in tray) or
+    dialog boxes (windowed mode) if critical failures occur
 - **User-facing notifications:**
   - Tray balloon warning: "Device monitoring failed to start completely. Some features may be unavailable..."
-  - Dialog warning: "Activity tracking failed to start. The app will continue running but activity data may not be collected..."
+  - Dialog warning: "Activity tracking failed to start. The app will continue running but activity data may not be
+    collected..."
 - **Logging:**
   - Each subsystem failure is logged at ERROR level with full diagnostics
   - Degraded mode is explicitly noted in logs
@@ -198,7 +202,8 @@ Support reliable auto-start at user logon.
 
 - **Files:** settings model/service (new), relevant view/viewmodel if exposed in UI
 - **Status:** Completed.
-- **Implemented:** Added persisted settings through `AppUserSettings` + `AppSettingsService` under `%AppData%\KeyPulse\settings.json`.
+- **Implemented:** Added persisted settings through `AppUserSettings` + `AppSettingsService` under
+  `%AppData%\KeyPulse\settings.json`.
 - **Persisted preferences:**
   - launch at login
 - **UX wiring:** Added synced tray + settings-tab toggle behavior with shared settings updates in `App.xaml.cs`.
@@ -268,7 +273,8 @@ Make release output suitable for actual deployment.
 - **Implement:** Ensure installer/uninstaller does not remove:
   - `%AppData%\KeyPulse\devices.db`
   - logs unless user chooses full cleanup
-- **Implemented:** Inno Setup uninstall flow now prompts user whether to remove `%AppData%\KeyPulse` data; default behavior preserves user data unless explicitly confirmed.
+- **Implemented:** Inno Setup uninstall flow now prompts user whether to remove `%AppData%\KeyPulse` data; default
+  behavior preserves user data unless explicitly confirmed.
 - **Acceptance criteria:**
   - upgrading app keeps history and settings intact (pending verification)
 
@@ -285,35 +291,42 @@ Make the app manageable for real users.
 #### 6.1 Add a settings surface
 
 - **Files:** likely new settings view/viewmodel; maybe `MainWindow.xaml` / settings page
+- **Status:** Completed.
 - **Settings to add:**
   - Launch on Login
-  - Run in background / start minimized to tray
-  - Open window on launch
-  - Optional log level
-  - Optional "reset diagnostics" / "open logs folder"
+  - Open logs folder
+  - Support-oriented log viewer (dropdown + content display)
+- **Implemented:**
+  - Added startup setting for `Launch on Login`
+  - Added `Open Logs Folder` action in Settings
+  - Added in-app log viewer with log-file dropdown, refresh, copy, and read-only log content display
+  - Log panel is hidden by default behind `Show Logs`, with quick Fatal/Error counts on the toggle
+  - Filter options show per-level counts (`All`, `Fatal`, `Error`, `Warning`, `Information`, `Debug`)
 - **Acceptance criteria:**
-  - key operational settings are discoverable in UI
+  - key operational settings are discoverable in UI ✅
 
 #### 6.2 Improve tray UX
 
 - **Files:** `App.xaml.cs`
+- **Status:** Completed.
 - **Add tray menu items:**
   - Open
   - Launch on Login (toggle)
-  - Run in background (toggle)
-  - Open logs folder
   - Exit
+- **Implemented:** Retained a minimal tray menu for frequent actions; logs access remains in Settings to keep tray UX
+  focused.
 - **Acceptance criteria:**
-  - most common actions can be managed without opening main UI
+  - most common tray actions are available without opening main UI ✅
 
 #### 6.3 Add user-visible startup failure messaging
 
 - **Files:** `App.xaml.cs`
+- **Status:** Completed.
 - **Implement:** If startup is partially broken:
   - show a single tray balloon / dialog / notification
   - direct user to logs
 - **Acceptance criteria:**
-  - failures are visible without attaching a debugger
+  - failures are visible without attaching a debugger ✅
 
 ---
 
@@ -462,6 +475,7 @@ KeyPulse is production-ready when all of these are true:
 - can enable/disable "Launch on Login"
 - starts silently to tray at login
 - logs operational issues to disk
+- logs are accessible for support without becoming a primary day-to-day workflow
 - survives crashes and reboots with consistent DB state
 - upgrades without losing user data
 - uses a real release build configuration
