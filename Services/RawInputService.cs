@@ -1,9 +1,9 @@
-﻿using System.Diagnostics;
-using System.Runtime.InteropServices;
+﻿using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
 using KeyPulse.Helpers;
 using KeyPulse.Models;
+using Serilog;
 
 namespace KeyPulse.Services;
 
@@ -198,6 +198,7 @@ public class RawInputService : IDisposable
     /// </summary>
     public void Start()
     {
+        Log.Information("RawInputService startup begin");
         Application.Current.Dispatcher.Invoke(() =>
         {
             // HWND_MESSAGE (-3) parent → invisible, message-only window; no taskbar entry.
@@ -213,7 +214,12 @@ public class RawInputService : IDisposable
             _hwndSource.AddHook(WndProc);
 
             RegisterDevices(_hwndSource.Handle);
+            Log.Debug(
+                "RawInputService message window created: Handle=0x{WindowHandle:X}",
+                _hwndSource.Handle.ToInt64()
+            );
         });
+        Log.Information("RawInputService startup completed");
     }
 
     private static void RegisterDevices(IntPtr hwnd)
@@ -239,9 +245,12 @@ public class RawInputService : IDisposable
         };
 
         if (!RegisterRawInputDevices(devices, (uint)devices.Length, (uint)Marshal.SizeOf<RAWINPUTDEVICE>()))
-            Debug.WriteLine($"RawInputService: RegisterRawInputDevices failed (error {Marshal.GetLastWin32Error()})");
+            Log.Error(
+                "RawInputService: RegisterRawInputDevices failed (error {Win32Error})",
+                Marshal.GetLastWin32Error()
+            );
         else
-            Debug.WriteLine("RawInputService: Raw Input registered successfully.");
+            Log.Information("RawInputService: Raw Input registered successfully.");
     }
 
     private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
@@ -255,7 +264,7 @@ public class RawInputService : IDisposable
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"RawInputService WndProc error: {ex.Message}");
+            Log.Error(ex, "RawInputService WndProc error");
         }
 
         return IntPtr.Zero;
@@ -466,7 +475,12 @@ public class RawInputService : IDisposable
             var devicePath = Marshal.PtrToStringUni(namePtr) ?? "";
             var deviceId = ParseDeviceId(devicePath);
             _deviceHandleCache[hDevice] = deviceId;
-            Debug.WriteLine($"RawInputService: mapped hDevice 0x{hDevice:X} → '{deviceId}' (path: {devicePath})");
+            Log.Debug(
+                "RawInputService: mapped hDevice 0x{DeviceHandle:X} to {DeviceId} (path: {DevicePath})",
+                hDevice.ToInt64(),
+                deviceId,
+                devicePath
+            );
             return deviceId;
         }
         finally
@@ -552,6 +566,7 @@ public class RawInputService : IDisposable
         }
 
         _dataService.SaveActivitySnapshots(snapshots);
+        Log.Debug("RawInputService flushed {SnapshotCount} activity snapshot buckets", snapshots.Count);
     }
 
     public void Dispose()
@@ -559,6 +574,8 @@ public class RawInputService : IDisposable
         if (_disposed)
             return;
         _disposed = true;
+
+        Log.Information("RawInputService dispose begin");
 
         _flushTimer.Dispose();
 
@@ -569,7 +586,7 @@ public class RawInputService : IDisposable
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"RawInputService flush on dispose failed: {ex.Message}");
+            Log.Error(ex, "RawInputService flush on dispose failed");
         }
 
         Application.Current?.Dispatcher.Invoke(() =>
@@ -581,6 +598,8 @@ public class RawInputService : IDisposable
                 _hwndSource = null;
             }
         });
+
+        Log.Information("RawInputService dispose completed");
 
         GC.SuppressFinalize(this);
     }

@@ -3,77 +3,83 @@
 ## Phase 1 - Stabilize startup and configuration
 
 ### Goal
+
 Make startup behavior deterministic and aligned with intended product behavior.
 
 ### Work items
 
-#### 1.1 Unify startup mode resolution
-- **Files:** `App.xaml.cs`, `App.config`
-- **Current issue:** `App.config` contains `RunInBackground`, but `App.xaml.cs` currently only reads `KEYPULSE_RUN_IN_BACKGROUND`.
-- **Implement:** Create one startup resolution path with precedence:
-  1. environment variable `KEYPULSE_RUN_IN_BACKGROUND` if present
-  2. otherwise `App.config` `RunInBackground`
-  3. otherwise default `false`
-- **Add:** A small helper in `App.xaml.cs` or a config helper class: `ResolveRunInBackground()`
+#### 1.1 Standardize startup mode strategy
+
+- **Files:** `App.xaml.cs`
+- **Status:** Completed.
+- **Implemented:** Startup mode resolution centralized in `ResolveRunInBackground()` with clear precedence:
+  1. launch arguments `--tray` or `--startup` force tray mode for that process
+  2. otherwise build default applies:
+    - `Debug` => foreground window
+    - `Release` => tray/background
 - **Acceptance criteria:**
-  - `RunInBackground=true` in `App.config` starts to tray
-  - env var overrides config
-  - behavior is consistent across debug/release
+  - `Debug` launches foreground by default ✅
+  - `Release` launches tray by default ✅
+  - `--tray` / `--startup` consistently force tray in both build configs ✅
 
 #### 1.2 Define "auto-start launch behavior"
+
 - **Files:** `App.xaml.cs`
-- **Implement:**
+- **Status:** Completed.
+- **Implemented:** Tray-first startup behavior integrated:
   - When launched from startup/login:
-    - do not show the main window
-    - initialize tray icon immediately
-    - begin startup work in background
-    - expose UI only via tray click/menu
-  - This can be:
-    - always tray-first if `RunInBackground=true`
-    - or additionally detect "launched from startup" if you later support a dedicated startup flag
+    - does not show the main window
+    - initializes tray icon immediately
+    - begins startup work in background
+    - exposes UI only via tray click/menu
+  - Startup entry arguments (`--startup` or `--tray`) force tray-first behavior
 - **Acceptance criteria:**
-  - app starts silently in tray after login
-  - no disruptive main window popup at boot
+  - app starts silently in tray after login ✅
+  - no disruptive main window popup at boot ✅
 
 #### 1.3 Foreground the existing instance
+
 - **Files:** `App.xaml.cs`
-- **Current issue:** Second launch just shows "already running".
-- **Implement:**
-  - If a second launch happens:
-    - signal the existing instance to show/activate the main window
-    - then exit the second process
-  - Typical solutions:
-    - named pipe
-    - local IPC
-    - Windows message
-    - mutex + window message
+- **Status:** Completed.
+- **Implemented:** Single-instance mutex enforcement with instance activation signal:
+  - On second launch:
+    - checks for existing instance via named mutex
+    - signals the existing instance to show/activate the main window
+    - exits the second process
+  - Uses mutex + `WM_SHOWWINDOW` message for IPC
 - **Acceptance criteria:**
-  - double launching the app restores the first instance instead of just showing a message
+  - double launching the app restores the first instance instead of just showing a message ✅
 
 ---
 
 ## Phase 2 - Add persistent logging
 
 ### Goal
-Replace debug-only diagnostics with production logging.
+
+Use structured, persistent file logging for startup/runtime/shutdown diagnostics.
 
 ### Work items
 
 #### 2.1 Wire up structured logging
+
 - **Files:** `App.xaml.cs`, `KeyPulse.csproj`
-- **Current state:** Serilog is referenced in `KeyPulse.csproj`, but not used.
-- **Implement:** Add Serilog startup initialization with file sink under `%AppData%\KeyPulse\Logs\`
+- **Status:** Completed.
+- **Implemented:** Serilog startup initialization with file sink under `%AppData%\KeyPulse\Logs\`
 - **Recommended log files:**
   - rolling daily logs
   - retained for a limited number of days/files
-- **Likely package additions needed:**
+- **Added package:**
   - `Serilog.Sinks.File`
-  - optionally `Serilog.Sinks.Async`
+- **Current log level policy:**
+  - `Debug` build: `Debug+`
+  - `Release` build: `Information+`
 - **Acceptance criteria:**
-  - app writes logs on startup, shutdown, and failures
-  - logs persist after app restarts
+  - app writes logs on startup, shutdown, and failures ✅
+  - logs persist after app restarts ✅
+  - `Release` no longer emits `Debug` events by default ✅
 
 #### 2.2 Replace `Debug.WriteLine`
+
 - **Files:**
   - `App.xaml.cs`
   - `Services/DataService.cs`
@@ -81,7 +87,8 @@ Replace debug-only diagnostics with production logging.
   - `Services/RawInputService.cs`
   - `Helpers/HeartbeatFile.cs`
   - `Helpers/PowerShellScripts.cs`
-- **Implement:** Replace `Debug.WriteLine(...)` with structured logging calls:
+- **Status:** Completed.
+- **Implemented:** Replaced `Debug.WriteLine(...)` with structured logging calls:
   - information
   - warning
   - error
@@ -94,18 +101,21 @@ Replace debug-only diagnostics with production logging.
   - duplicate event suppression
   - exceptions in service flows
 - **Acceptance criteria:**
-  - no critical operational diagnostics depend solely on debugger output
+  - no critical operational diagnostics depend solely on debugger output ✅
+  - no `Debug.WriteLine` usage remains in target Phase 2 files ✅
 
 ---
 
 ## Phase 3 - Harden shutdown, crash recovery, and long-running behavior
 
 ### Goal
+
 Make the app reliable as an always-running background utility.
 
 ### Work items
 
 #### 3.1 Audit shutdown paths
+
 - **Files:** `App.xaml.cs`, `Services/UsbMonitorService.cs`, `Services/RawInputService.cs`
 - **Implement:** Verify all shutdown paths:
   - manual exit from tray
@@ -123,6 +133,7 @@ Make the app reliable as an always-running background utility.
   - no orphan tray icons after app exit
 
 #### 3.2 Improve crash recovery observability
+
 - **Files:** `Services/DataService.cs`
 - **Implement:** Keep current recovery logic, but add:
   - detailed logs of what recovery did
@@ -133,6 +144,7 @@ Make the app reliable as an always-running background utility.
   - crash recovery behavior is diagnosable from logs
 
 #### 3.3 Add retry/degraded-mode startup
+
 - **Files:** `App.xaml.cs`, `Services/UsbMonitorService.cs`, `Services/RawInputService.cs`
 - **Implement:** If one subsystem fails:
   - app should still come up in tray if possible
@@ -150,11 +162,13 @@ Make the app reliable as an always-running background utility.
 ## Phase 4 - Implement "Start with Windows"
 
 ### Goal
+
 Support reliable auto-start at user logon.
 
 ### Work items
 
 #### 4.1 Add an autostart abstraction
+
 - **Files:** new file (e.g. `Services/StartupRegistrationService.cs`), optional settings model/viewmodel files
 - **Implement:** Add methods such as:
   - `bool IsEnabled()`
@@ -166,6 +180,7 @@ Support reliable auto-start at user logon.
   - app can enable/disable start-with-Windows for current user
 
 #### 4.2 Add a setting for "Start with Windows"
+
 - **Files:** settings model/service (new), relevant view/viewmodel if exposed in UI
 - **Implement:** Persist a user-facing preference for:
   - launch at login
@@ -174,9 +189,10 @@ Support reliable auto-start at user logon.
   - user can toggle startup behavior without editing config manually
 
 #### 4.3 Support explicit startup arguments
+
 - **Files:** `App.xaml.cs`
-- **Implement:** Support launch argument such as:
-  - `--background`
+- **Implement:** Support launch arguments:
+  - `--tray`
   - `--startup`
 - **Use:** force tray launch when invoked from the Run key.
 - **Acceptance criteria:**
@@ -187,11 +203,13 @@ Support reliable auto-start at user logon.
 ## Phase 5 - Fix release build and packaging basics
 
 ### Goal
+
 Make release output suitable for actual deployment.
 
 ### Work items
 
 #### 5.1 Correct release configuration
+
 - **Files:** `KeyPulse.csproj`
 - **Current issue:** Release currently defines `DEBUG`.
 - **Implement:**
@@ -202,6 +220,7 @@ Make release output suitable for actual deployment.
   - Release build is truly production-oriented
 
 #### 5.2 Decide install/publish strategy
+
 - **Files:** likely new installer/project files (not yet present)
 - **Recommended options:**
   - **Option A: Inno Setup / WiX** (best fit for current app style)
@@ -219,6 +238,7 @@ Make release output suitable for actual deployment.
   - upgrade works without data loss
 
 #### 5.3 Preserve user data across upgrades
+
 - **Files:** installer config, possibly migration/recovery docs
 - **Implement:** Ensure installer/uninstaller does not remove:
   - `%AppData%\KeyPulse\devices.db`
@@ -231,11 +251,13 @@ Make release output suitable for actual deployment.
 ## Phase 6 - Settings, UX, and supportability
 
 ### Goal
+
 Make the app manageable for real users.
 
 ### Work items
 
 #### 6.1 Add a settings surface
+
 - **Files:** likely new settings view/viewmodel; maybe `MainWindow.xaml` / settings page
 - **Settings to add:**
   - Start with Windows
@@ -247,6 +269,7 @@ Make the app manageable for real users.
   - key operational settings are discoverable in UI
 
 #### 6.2 Improve tray UX
+
 - **Files:** `App.xaml.cs`
 - **Add tray menu items:**
   - Open
@@ -258,6 +281,7 @@ Make the app manageable for real users.
   - most common actions can be managed without opening main UI
 
 #### 6.3 Add user-visible startup failure messaging
+
 - **Files:** `App.xaml.cs`
 - **Implement:** If startup is partially broken:
   - show a single tray balloon / dialog / notification
@@ -270,11 +294,13 @@ Make the app manageable for real users.
 ## Phase 7 - Reduce operational risk
 
 ### Goal
+
 Lower support burden and avoid preventable failures.
 
 ### Work items
 
 #### 7.1 Replace or reduce PowerShell dependency
+
 - **Files:** `Helpers/PowerShellScripts.cs`, callers in `UsbMonitorService` / helpers
 - **Why:** PowerShell in background apps can be slower, policy-restricted, and less reliable in enterprise environments.
 - **Implement:** Prefer direct Windows-native lookup if feasible (registry/SetupAPI/WMI without spawning PowerShell).
@@ -282,6 +308,7 @@ Lower support burden and avoid preventable failures.
   - device-name lookup no longer depends on launching PowerShell, or at least has strong fallback behavior
 
 #### 7.2 Add DB backup / migration safety plan
+
 - **Files:** `Services/DataService.cs`, installer/update docs, maybe helper utilities
 - **Implement:** Before applying risky future migrations:
   - optionally create timestamped DB backup
@@ -291,6 +318,7 @@ Lower support burden and avoid preventable failures.
   - corrupted or failed upgrade is recoverable
 
 #### 7.3 Add code signing
+
 - **Files:** CI/release pipeline, installer config
 - **Implement:** Sign:
   - executable
@@ -304,11 +332,13 @@ Lower support burden and avoid preventable failures.
 ## Phase 8 - Updates and release operations
 
 ### Goal
+
 Support long-term maintenance.
 
 ### Work items
 
 #### 8.1 Add versioned release process
+
 - **Files:** release docs, pipeline config if present later
 - **Implement:** Define:
   - semantic or date-based versioning
@@ -318,6 +348,7 @@ Support long-term maintenance.
   - reproducible release process
 
 #### 8.2 Add auto-update path (optional but recommended)
+
 - **Options:**
   - installer-driven updates
   - winget distribution
@@ -331,15 +362,13 @@ Support long-term maintenance.
 ## Proposed file-level work map
 
 ### Immediate changes
+
 - `App.xaml.cs`
   - startup mode resolution
   - startup args
   - single-instance activation
   - log bootstrap
   - improved shutdown handling
-- `App.config`
-  - keep `RunInBackground`
-  - potentially add more settings until a real settings store exists
 - `KeyPulse.csproj`
   - fix Release config
   - add logging sink packages if needed
@@ -359,6 +388,7 @@ Support long-term maintenance.
   - stronger fallback/error handling
 
 ### New likely files
+
 - `Services/StartupRegistrationService.cs`
 - `Services/AppSettingsService.cs` (or similar)
 - settings model/viewmodel/view
@@ -369,6 +399,7 @@ Support long-term maintenance.
 ## Recommended delivery order (milestones)
 
 ### Milestone 1 - Operational baseline
+
 - startup config fix
 - release config fix
 - Serilog integration
@@ -376,17 +407,20 @@ Support long-term maintenance.
 - tray-first boot polish
 
 ### Milestone 2 - Auto-start
+
 - startup registration service
-- `--startup` / `--background` argument support
+- `--startup` / `--tray` argument support
 - UI toggle for Start with Windows
 
 ### Milestone 3 - Packaging
+
 - installer
 - upgrade path
 - preserved DB/log data
 - signed builds if possible
 
 ### Milestone 4 - Hardening
+
 - retry/degraded startup
 - better crash diagnostics
 - PowerShell dependency cleanup
@@ -397,6 +431,7 @@ Support long-term maintenance.
 ## Definition of done
 
 KeyPulse is production-ready when all of these are true:
+
 - installs via a real installer
 - can enable/disable "Start with Windows"
 - starts silently to tray at login
@@ -405,4 +440,3 @@ KeyPulse is production-ready when all of these are true:
 - upgrades without losing user data
 - uses a real release build configuration
 - exposes key behavior through settings/UI, not just config/env vars
-

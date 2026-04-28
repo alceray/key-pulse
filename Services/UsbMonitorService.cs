@@ -1,10 +1,10 @@
 ﻿using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
-using System.Diagnostics;
 using System.Management;
 using System.Windows;
 using KeyPulse.Helpers;
 using KeyPulse.Models;
+using Serilog;
 
 namespace KeyPulse.Services;
 
@@ -59,11 +59,13 @@ public class UsbMonitorService : IDisposable
     /// </summary>
     public async Task StartAsync()
     {
+        Log.Information("UsbMonitorService startup begin");
         // SetCurrentDevicesFromSystem does WMI queries and PowerShell device-name lookups
         // which can take 1-3 seconds — run on a thread pool thread to keep the UI responsive.
         // Internal Dispatcher.Invoke calls marshal UI work back to the UI thread safely.
         await Task.Run(SetCurrentDevicesFromSystem);
         StartMonitoring();
+        Log.Information("UsbMonitorService startup completed");
     }
 
     private ObservableCollection<Device> GetAllDevices()
@@ -167,7 +169,7 @@ public class UsbMonitorService : IDisposable
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"ERROR in DeviceInsertedEvent: {ex.Message}");
+            Log.Error(ex, "ERROR in DeviceInsertedEvent");
         }
     }
 
@@ -206,7 +208,7 @@ public class UsbMonitorService : IDisposable
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"ERROR in ProcessCachedDevice: {ex.Message}");
+            Log.Error(ex, "ERROR in ProcessCachedDevice for DeviceId={DeviceId}", deviceId);
         }
     }
 
@@ -237,7 +239,7 @@ public class UsbMonitorService : IDisposable
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"ERROR in DeviceRemovedEvent: {ex.Message}");
+            Log.Error(ex, "ERROR in DeviceRemovedEvent");
         }
     }
 
@@ -310,10 +312,11 @@ public class UsbMonitorService : IDisposable
             _removeWatcher = new ManagementEventWatcher(removeQuery);
             _removeWatcher.EventArrived += DeviceRemovedEvent;
             _removeWatcher.Start();
+            Log.Information("USB WMI watchers started successfully");
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"ERROR in StartMonitoring: {ex.Message}");
+            Log.Error(ex, "ERROR in StartMonitoring");
         }
     }
 
@@ -341,6 +344,8 @@ public class UsbMonitorService : IDisposable
                     devicesById[deviceId] = [];
                 devicesById[deviceId].Add(obj);
             }
+
+            Log.Information("Detected {DeviceCount} connected HID devices at startup", devicesById.Count);
 
             foreach (var (deviceId, objects) in devicesById)
             {
@@ -374,10 +379,12 @@ public class UsbMonitorService : IDisposable
                 };
                 AddDeviceEvent(connectionStartedEvent, currDevice);
             }
+
+            Log.Debug("SetCurrentDevicesFromSystem finished device snapshot sync");
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"ERROR in SetCurrentDevicesFromSystem: {ex.Message}");
+            Log.Error(ex, "ERROR in SetCurrentDevicesFromSystem");
         }
     }
 
@@ -394,6 +401,7 @@ public class UsbMonitorService : IDisposable
 
         if (disposing)
         {
+            Log.Information("UsbMonitorService dispose begin");
             _heartbeatTimer.Dispose();
             HeartbeatFile.Clear();
 
@@ -431,6 +439,8 @@ public class UsbMonitorService : IDisposable
                 _removeWatcher.Dispose();
                 _removeWatcher = null;
             }
+
+            Log.Information("UsbMonitorService dispose completed");
         }
 
         _disposed = true;

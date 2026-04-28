@@ -1,5 +1,4 @@
 ﻿using System.ComponentModel;
-using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Reflection;
@@ -9,6 +8,7 @@ using KeyPulse.Data;
 using KeyPulse.Services;
 using KeyPulse.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
+using Serilog;
 
 namespace KeyPulse;
 
@@ -29,32 +29,39 @@ public partial class App : System.Windows.Application
 
     protected override async void OnStartup(StartupEventArgs e)
     {
+        _appName = Assembly.GetExecutingAssembly().GetName().Name ?? "KeyPulse";
+        ConfigureLogging(_appName);
+        Log.Information("{AppName} startup initiated", _appName);
+
         // Attempt clean shutdown on unhandled exceptions (crashes).
-        // Force-kills (IDE stop, TerminateProcess) cannot be caught — RecoverFromCrash() handles those.
-        AppDomain.CurrentDomain.UnhandledException += (s, args) =>
+        // Force-kills (IDE stop, TerminateProcess) cannot be caught - RecoverFromCrash() handles those.
+        AppDomain.CurrentDomain.UnhandledException += (_, args) =>
         {
-            Debug.WriteLine($"Unhandled exception: {args.ExceptionObject}");
+            Log.Fatal(args.ExceptionObject as Exception, "Unhandled exception");
             _rawInputService?.Dispose();
             _usbMonitorService?.Dispose();
         };
-        DispatcherUnhandledException += (s, args) =>
+        DispatcherUnhandledException += (_, args) =>
         {
-            Debug.WriteLine($"Dispatcher unhandled exception: {args.Exception}");
+            Log.Fatal(args.Exception, "Dispatcher unhandled exception");
             _rawInputService?.Dispose();
             _usbMonitorService?.Dispose();
         };
 
-        _appName = Assembly.GetExecutingAssembly().GetName().Name ?? "KeyPulse";
         _appMutex = new Mutex(true, _appName, out var canCreateApp);
         if (!canCreateApp)
         {
+            Log.Information("Secondary instance detected; signaling active instance");
             if (!SignalExistingInstance(_appName))
+            {
+                Log.Warning("Failed to signal existing instance; showing already-running message");
                 System.Windows.MessageBox.Show(
                     "The application is already running.",
                     _appName,
                     MessageBoxButton.OK,
                     MessageBoxImage.Information
                 );
+            }
 
             Environment.Exit(0);
         }
@@ -65,6 +72,7 @@ public partial class App : System.Windows.Application
         // Default: Debug => foreground window, Release => tray/background.
         // Launch args can force tray startup for packaging/startup-entry scenarios.
         RunInBackground = ResolveRunInBackground(e.Args);
+        Log.Information("Startup mode resolved: RunInBackground={RunInBackground}", RunInBackground);
 
         var services = new ServiceCollection();
         ConfigureServices(services);
@@ -84,17 +92,19 @@ public partial class App : System.Windows.Application
             MainWindow.Show();
         }
 
-        // WMI device snapshot + watcher setup — awaited off the UI thread.
+        // WMI device snapshot + watcher setup - awaited off the UI thread.
         await _usbMonitorService.StartAsync();
 
         _rawInputService = ServiceProvider.GetRequiredService<RawInputService>();
         _rawInputService.Start();
 
+        Log.Information("{AppName} startup completed", _appName);
         base.OnStartup(e);
     }
 
     protected override void OnExit(ExitEventArgs e)
     {
+        Log.Information("{AppName} shutdown initiated", _appName ?? "KeyPulse");
         try
         {
             _activateEventRegistration?.Unregister(null);
@@ -104,14 +114,16 @@ public partial class App : System.Windows.Application
             _trayIcon?.Dispose();
             _rawInputService?.Dispose();
             _usbMonitorService?.Dispose();
-            ServiceProvider?.Dispose();
+            ServiceProvider.Dispose();
+            Log.Information("{AppName} shutdown completed", _appName ?? "KeyPulse");
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"Error during application shutdown: {ex.Message}");
+            Log.Error(ex, "Error during application shutdown");
         }
         finally
         {
+            Log.CloseAndFlush();
             base.OnExit(e);
         }
     }
@@ -154,6 +166,36 @@ public partial class App : System.Windows.Application
         return $"{appName}.ACTIVATE";
     }
 
+    private static void ConfigureLogging(string appName)
+    {
+        try
+        {
+            var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+            var logDirectory = Path.Combine(appData, appName, "Logs");
+            Directory.CreateDirectory(logDirectory);
+
+            var loggerConfiguration = new LoggerConfiguration().Enrich.FromLogContext();
+#if DEBUG
+            loggerConfiguration = loggerConfiguration.MinimumLevel.Debug();
+#else
+            loggerConfiguration = loggerConfiguration.MinimumLevel.Information();
+#endif
+
+            Log.Logger = loggerConfiguration
+                .WriteTo.File(
+                    Path.Combine(logDirectory, "keypulse-.log"),
+                    rollingInterval: RollingInterval.Day,
+                    retainedFileCountLimit: 14,
+                    shared: true
+                )
+                .CreateLogger();
+        }
+        catch
+        {
+            // Logging bootstrap must never block application startup.
+        }
+    }
+
     private void InitializeActivationSignalListener()
     {
         _activateEvent = new EventWaitHandle(false, EventResetMode.AutoReset, GetActivationEventName(_appName!));
@@ -163,6 +205,10 @@ public partial class App : System.Windows.Application
             null,
             Timeout.Infinite,
             false
+        );
+        Log.Debug(
+            "Activation signal listener initialized for {ActivationEventName}",
+            GetActivationEventName(_appName!)
         );
     }
 
@@ -175,6 +221,7 @@ public partial class App : System.Windows.Application
         }
         catch
         {
+            Log.Warning("Activation signal event was not available for {AppName}", appName);
             return false;
         }
     }
@@ -188,13 +235,15 @@ public partial class App : System.Windows.Application
             Text = _appName,
             ContextMenuStrip = new ContextMenuStrip(),
         };
-        _trayIcon.ContextMenuStrip.Items.Add("Open", null, (s, args) => ShowMainWindow());
-        _trayIcon.ContextMenuStrip.Items.Add("Exit", null, (s, args) => Shutdown());
-        _trayIcon.MouseClick += (s, args) =>
+        _trayIcon.ContextMenuStrip.Items.Add("Open", null, (_, _) => ShowMainWindow());
+        _trayIcon.ContextMenuStrip.Items.Add("Exit", null, (_, _) => Shutdown());
+        _trayIcon.MouseClick += (_, args) =>
         {
             if (args.Button == MouseButtons.Left)
                 ShowMainWindow();
         };
+
+        Log.Information("Tray icon initialized");
     }
 
     private void ShowMainWindow()

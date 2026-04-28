@@ -3,6 +3,7 @@ using KeyPulse.Data;
 using KeyPulse.Helpers;
 using KeyPulse.Models;
 using Microsoft.EntityFrameworkCore;
+using Serilog;
 
 namespace KeyPulse.Services;
 
@@ -24,9 +25,14 @@ public class DataService
 
     private void InitializeDatabase()
     {
+        var stopwatch = Stopwatch.StartNew();
         using var ctx = _factory.CreateDbContext();
+        Log.Information("Applying database migrations");
         ctx.Database.Migrate();
+        Log.Information("Enabling SQLite WAL mode");
         ctx.Database.ExecuteSqlRaw("PRAGMA journal_mode=WAL;");
+        stopwatch.Stop();
+        Log.Information("Database initialization completed in {ElapsedMs}ms", stopwatch.ElapsedMilliseconds);
     }
 
     public Device? GetDevice(string deviceId)
@@ -55,7 +61,7 @@ public class DataService
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"ERROR in SaveDevice: {ex.Message}");
+            Log.Error(ex, "ERROR in SaveDevice for DeviceId={DeviceId}", device.DeviceId);
         }
     }
 
@@ -140,11 +146,17 @@ public class DataService
         }
         catch (DbUpdateException ex)
         {
-            Debug.WriteLine($"Duplicate DeviceEvent skipped: {ex.Message}");
+            Log.Warning(
+                ex,
+                "Duplicate DeviceEvent skipped for DeviceId={DeviceId}, EventType={EventType}, EventTime={EventTime}",
+                deviceEvent.DeviceId,
+                deviceEvent.EventType,
+                deviceEvent.EventTime
+            );
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"ERROR in AddDeviceEvent: {ex.Message}");
+            Log.Error(ex, "ERROR in AddDeviceEvent for DeviceId={DeviceId}", deviceEvent.DeviceId);
         }
     }
 
@@ -158,7 +170,7 @@ public class DataService
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"ERROR in SaveActivitySnapshots: {ex.Message}");
+            Log.Error(ex, "ERROR in SaveActivitySnapshots");
         }
     }
 
@@ -213,6 +225,7 @@ public class DataService
     /// </summary>
     public void RecoverFromCrash()
     {
+        var stopwatch = Stopwatch.StartNew();
         using var ctx = _factory.CreateDbContext();
 
         var lastAppEvent = ctx
@@ -221,7 +234,10 @@ public class DataService
             .FirstOrDefault();
 
         if (lastAppEvent == null || lastAppEvent.EventType != EventTypes.AppStarted)
+        {
+            Log.Debug("RecoverFromCrash skipped; no orphaned app session detected");
             return;
+        }
 
         // Use the last heartbeat as the crash time if it's more recent than the session start.
         // Falls back to the session start timestamp if no heartbeat is available.
@@ -262,7 +278,13 @@ public class DataService
         ctx.DeviceEvents.Add(new DeviceEvent { EventType = EventTypes.AppEnded, EventTime = crashTime });
 
         ctx.SaveChanges();
-        Debug.WriteLine("RecoverFromCrash: wrote missing AppEnded and ConnectionEnded events.");
+        Log.Information(
+            "RecoverFromCrash backfilled AppEnded and {ConnectionEndedCount} ConnectionEnded events at {CrashTime}",
+            unbalancedDeviceIds.Count,
+            crashTime
+        );
+        stopwatch.Stop();
+        Log.Debug("RecoverFromCrash completed in {ElapsedMs}ms", stopwatch.ElapsedMilliseconds);
     }
 
     /// <summary>
@@ -273,8 +295,10 @@ public class DataService
     {
         try
         {
+            var stopwatch = Stopwatch.StartNew();
             using var ctx = _factory.CreateDbContext();
             var devices = ctx.Devices.ToList();
+            Log.Information("Rebuilding device snapshots for {DeviceCount} devices", devices.Count);
             foreach (var device in devices)
             {
                 device.TotalUsage = ComputeTotalUsage(ctx, device.DeviceId);
@@ -283,10 +307,12 @@ public class DataService
             }
 
             ctx.SaveChanges();
+            stopwatch.Stop();
+            Log.Information("RebuildDeviceSnapshots completed in {ElapsedMs}ms", stopwatch.ElapsedMilliseconds);
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"ERROR in RebuildDeviceSnapshots: {ex.Message}");
+            Log.Error(ex, "ERROR in RebuildDeviceSnapshots");
         }
     }
 }

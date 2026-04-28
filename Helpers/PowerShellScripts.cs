@@ -1,6 +1,6 @@
 ﻿using System.Collections.ObjectModel;
-using System.Diagnostics;
 using System.Management.Automation;
+using Serilog;
 
 namespace KeyPulse.Helpers;
 
@@ -23,6 +23,7 @@ public static class PowershellScripts
             if (result?.BaseObject is string deviceName && !string.IsNullOrEmpty(deviceName))
                 return deviceName;
 
+        Log.Debug("PowerShell device-name lookup returned no result for DeviceId={DeviceId}", deviceId);
         return null;
     }
 
@@ -35,7 +36,7 @@ public static class PowershellScripts
 
         if (ps.Streams.Error.Count > 0)
             foreach (var error in ps.Streams.Error)
-                Debug.WriteLine($"PowerShell Error: {error}");
+                Log.Warning("PowerShell Error: {PowerShellError}", error.ToString());
 
         return results;
     }

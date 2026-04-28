@@ -1,6 +1,6 @@
-﻿using System.Diagnostics;
-using System.IO;
+﻿using System.IO;
 using System.Reflection;
+using Serilog;
 
 namespace KeyPulse.Helpers;
 
@@ -31,7 +31,7 @@ public static class HeartbeatFile
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"HeartbeatFile.Write failed: {ex.Message}");
+            Log.Error(ex, "HeartbeatFile.Write failed");
         }
     }
 
@@ -43,7 +43,11 @@ public static class HeartbeatFile
         try
         {
             if (!File.Exists(FilePath))
+            {
+                Log.Debug("HeartbeatFile.Read skipped; heartbeat file does not exist at {HeartbeatPath}", FilePath);
                 return null;
+            }
+
             var text = File.ReadAllText(FilePath).Trim();
             return DateTime.TryParse(text, null, System.Globalization.DateTimeStyles.RoundtripKind, out var dt)
                 ? dt
@@ -51,7 +55,7 @@ public static class HeartbeatFile
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"HeartbeatFile.Read failed: {ex.Message}");
+            Log.Error(ex, "HeartbeatFile.Read failed");
             return null;
         }
     }
@@ -68,7 +72,7 @@ public static class HeartbeatFile
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"HeartbeatFile.Clear failed: {ex.Message}");
+            Log.Error(ex, "HeartbeatFile.Clear failed");
         }
     }
 }
