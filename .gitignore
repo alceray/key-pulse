@@ -365,3 +365,6 @@ FodyWeavers.xsd
 # IDE specific folders
 .idea
 .vscode
+
+# Inno Setup installer output (compiled .exe artifacts)
+installer/output/

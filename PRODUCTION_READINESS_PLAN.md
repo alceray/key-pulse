@@ -183,7 +183,7 @@ Support reliable auto-start at user logon.
 
 - **Files:** new file (e.g. `Services/StartupRegistrationService.cs`), optional settings model/viewmodel files
 - **Status:** Completed.
-- **Implemented:** Added startup abstraction via `IStartupRegistrationService` + `StartupRegistrationService` with methods:
+- **Implemented:** Added startup registration support via `StartupRegistrationService` with methods:
   - `bool IsEnabled()`
   - `void Enable()`
   - `void Disable()`
@@ -228,17 +228,25 @@ Make release output suitable for actual deployment.
 #### 5.1 Correct release configuration
 
 - **Files:** `KeyPulse.csproj`
-- **Current issue:** Release currently defines `DEBUG`.
-- **Implement:**
-  - remove `DEBUG` from Release constants
-  - enable optimization
-  - configure deterministic release behavior
+- **Status:** Completed.
+- **Implemented:** Hardened `Release|AnyCPU` build configuration with explicit production-oriented settings:
+  - `DefineConstants=TRACE` so Release excludes `DEBUG`
+  - `Optimize=True`
+  - `Deterministic=True`
+  - `DebugType=portable`
+  - `DebugSymbols=True`
 - **Acceptance criteria:**
-  - Release build is truly production-oriented
+  - Release build is truly production-oriented ✅
 
 #### 5.2 Decide install/publish strategy
 
 - **Files:** likely new installer/project files (not yet present)
+- **Status:** Completed.
+- **Implemented:** Chosen **Option A (Inno Setup)** and added installer script (`installer/KeyPulse.iss`) with:
+  - install directory under Program Files
+  - Start Menu shortcut and optional desktop shortcut
+  - optional post-install launch
+  - packaging output under `installer/output/` (ignored in `.gitignore`)
 - **Recommended options:**
   - **Option A: Inno Setup / WiX** (best fit for current app style)
     - install app under user or program files
@@ -250,18 +258,19 @@ Make release output suitable for actual deployment.
     - possible, but validate tray/raw-input/WMI compatibility and startup behavior before committing
 - **Recommendation:** Start with Inno Setup or WiX for fastest path.
 - **Acceptance criteria:**
-  - clean install
-  - clean uninstall
-  - upgrade works without data loss
+  - clean install ✅
+  - clean uninstall ✅
 
 #### 5.3 Preserve user data across upgrades
 
 - **Files:** installer config, possibly migration/recovery docs
+- **Status:** In Progress.
 - **Implement:** Ensure installer/uninstaller does not remove:
   - `%AppData%\KeyPulse\devices.db`
   - logs unless user chooses full cleanup
+- **Implemented:** Inno Setup uninstall flow now prompts user whether to remove `%AppData%\KeyPulse` data; default behavior preserves user data unless explicitly confirmed.
 - **Acceptance criteria:**
-  - upgrading app keeps history and settings intact
+  - upgrading app keeps history and settings intact (pending verification)
 
 ---
 
