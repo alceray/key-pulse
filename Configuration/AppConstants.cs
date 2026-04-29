@@ -13,7 +13,9 @@ public static class AppConstants
     {
         public const string LogsDirectoryName = "Logs";
         public const string SettingsFileName = "settings.json";
-        public const string DatabaseFileName = "devices.db";
+        public const string DatabaseFileName = "keypulse-data.db";
+        public const string DatabaseBackupsDirectoryName = "DbBackups";
+        public const string PreMigrationBackupSuffix = ".pre-migration";
         public const string HeartbeatFileName = "heartbeat.txt";
         public const string LogFilePattern = "*.log";
         public const string RollingLogFileTemplate = "keypulse-.log";

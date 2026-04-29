@@ -276,7 +276,7 @@ Make release output suitable for actual deployment.
     - optionally create startup entry
     - create Start Menu shortcut
     - uninstall cleanly
-    - preserve `%AppData%\KeyPulse\devices.db`
+    - preserve `%AppData%\KeyPulse\keypulse-data.db`
   - **Option B: MSIX**
     - possible, but validate tray/raw-input/WMI compatibility and startup behavior before committing
 - **Recommendation:** Start with Inno Setup or WiX for fastest path.
@@ -289,7 +289,7 @@ Make release output suitable for actual deployment.
 - **Files:** installer config, possibly migration/recovery docs
 - **Status:** In Progress.
 - **Implement:** Ensure installer/uninstaller does not remove:
-  - `%AppData%\KeyPulse\devices.db`
+  - `%AppData%\KeyPulse\keypulse-data.db`
   - logs unless user chooses full cleanup
 - **Implemented:** Inno Setup uninstall flow now prompts user whether to remove
   `%AppData%\KeyPulse` data; default behavior preserves user data unless explicitly confirmed.
@@ -374,23 +374,30 @@ Lower support burden and avoid preventable failures.
 
 #### 7.2 Add DB backup / migration safety plan
 
-- **Files:** `Services/DataService.cs`, installer/update docs, maybe helper utilities
-- **Implement:** Before applying risky future migrations:
-  - optionally create timestamped DB backup
-  - log migration versions
-  - handle migration exceptions clearly
+- **Files:** `Services/DataService.cs`, `Configuration/AppConstants.cs`
+- **Status:** Completed.
+- **Implemented:** `DataService.InitializeDatabase()` now performs migration safety checks:
+  - logs applied/pending migration counts and pending migration names
+  - creates timestamped pre-migration backups under `%AppData%\KeyPulse\DbBackups\`
+  - includes SQLite sidecar files (`-wal`, `-shm`) when present
+  - wraps migration startup with explicit error logging and fail-fast rethrow
 - **Acceptance criteria:**
-  - corrupted or failed upgrade is recoverable
+  - pre-migration recovery point is generated before schema updates ✅
+  - migration failures are diagnosable from logs ✅
 
 #### 7.3 Add code signing
 
-- **Files:** CI/release pipeline, installer config
-- **Implement:** Sign:
-  - executable
-  - installer
+- **Files:** `scripts/Sign-ReleaseArtifacts.ps1`, release/pipeline config
+- **Status:** Deferred.
+- **Deferred rationale:** Scripted signing support is in place, but certificate procurement and CI secret onboarding are postponed for small trusted distribution.
+- **Implemented:** Added signing automation script for release artifacts:
+  - signs both app executable and installer artifacts
+  - supports either certificate thumbprint (`KEYPULSE_SIGN_CERT_THUMBPRINT`) or PFX (`KEYPULSE_SIGN_PFX_PATH` + `KEYPULSE_SIGN_PFX_PASSWORD`)
+  - enforces SHA-256 file digest + RFC3161 timestamping
+  - fails with explicit guidance if signing configuration is missing
 - **Acceptance criteria:**
-  - fewer SmartScreen/trust issues
-  - more production-ready distribution
+  - executable and installer signing can be executed in one scripted step
+  - release process is ready for CI secret wiring without code changes
 
 ---
 

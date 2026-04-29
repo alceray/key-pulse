@@ -1,4 +1,6 @@
 ﻿using System.Diagnostics;
+using System.IO;
+using KeyPulse.Configuration;
 using KeyPulse.Data;
 using KeyPulse.Helpers;
 using KeyPulse.Models;
@@ -27,12 +29,79 @@ public class DataService
     {
         var stopwatch = Stopwatch.StartNew();
         using var ctx = _factory.CreateDbContext();
-        Log.Information("Applying database migrations");
-        ctx.Database.Migrate();
-        Log.Information("Enabling SQLite WAL mode");
-        ctx.Database.ExecuteSqlRaw("PRAGMA journal_mode=WAL;");
-        stopwatch.Stop();
-        Log.Information("Database initialization completed in {ElapsedMs}ms", stopwatch.ElapsedMilliseconds);
+        try
+        {
+            var appliedMigrations = ctx.Database.GetAppliedMigrations().ToList();
+            var pendingMigrations = ctx.Database.GetPendingMigrations().ToList();
+            Log.Information(
+                "Database migration status: Applied={AppliedCount}, Pending={PendingCount}",
+                appliedMigrations.Count,
+                pendingMigrations.Count
+            );
+
+            if (pendingMigrations.Count > 0)
+            {
+                Log.Information("Pending migrations: {PendingMigrations}", string.Join(", ", pendingMigrations));
+                var backupPath = BackupDatabaseBeforeMigration(ctx);
+                if (!string.IsNullOrWhiteSpace(backupPath))
+                    Log.Information("Created pre-migration backup at {BackupPath}", backupPath);
+            }
+
+            Log.Information("Applying database migrations");
+            ctx.Database.Migrate();
+            Log.Information("Enabling SQLite WAL mode");
+            ctx.Database.ExecuteSqlRaw("PRAGMA journal_mode=WAL;");
+            stopwatch.Stop();
+            Log.Information("Database initialization completed in {ElapsedMs}ms", stopwatch.ElapsedMilliseconds);
+        }
+        catch (Exception ex)
+        {
+            stopwatch.Stop();
+            Log.Error(ex, "Database initialization failed after {ElapsedMs}ms", stopwatch.ElapsedMilliseconds);
+            throw;
+        }
+    }
+
+    private static string? BackupDatabaseBeforeMigration(ApplicationDbContext ctx)
+    {
+        try
+        {
+            var connection = ctx.Database.GetDbConnection();
+            var databasePath = connection.DataSource;
+            if (string.IsNullOrWhiteSpace(databasePath) || !File.Exists(databasePath))
+                return null;
+
+            var databaseDirectory = Path.GetDirectoryName(databasePath);
+            if (string.IsNullOrWhiteSpace(databaseDirectory))
+                return null;
+
+            var backupDirectory = Path.Combine(databaseDirectory, AppConstants.Paths.DatabaseBackupsDirectoryName);
+            Directory.CreateDirectory(backupDirectory);
+
+            var timestamp = DateTime.Now.ToString("yyyyMMdd-HHmmss-fff");
+            var baseName = Path.GetFileNameWithoutExtension(databasePath);
+            var extension = Path.GetExtension(databasePath);
+            var backupFileName = $"{baseName}-{timestamp}{AppConstants.Paths.PreMigrationBackupSuffix}{extension}";
+            var backupPath = Path.Combine(backupDirectory, backupFileName);
+
+            File.Copy(databasePath, backupPath, overwrite: false);
+            CopySidecarIfExists(databasePath + "-wal", backupPath + "-wal");
+            CopySidecarIfExists(databasePath + "-shm", backupPath + "-shm");
+            return backupPath;
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Failed to create pre-migration database backup");
+            return null;
+        }
+    }
+
+    private static void CopySidecarIfExists(string sourcePath, string destinationPath)
+    {
+        if (!File.Exists(sourcePath))
+            return;
+
+        File.Copy(sourcePath, destinationPath, overwrite: true);
     }
 
     public Device? GetDevice(string deviceId)
