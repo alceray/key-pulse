@@ -24,7 +24,15 @@ if ($status) {
 # Delete existing tag if it exists (local and remote)
 $existing = git tag --list $tag
 if ($existing) {
-    Write-Host "Tag '$tag' already exists locally. Deleting..." -ForegroundColor Yellow
+    Write-Host "Tag '$tag' already exists locally." -ForegroundColor Yellow
+    $confirmation = Read-Host "Delete existing tag and create a new one? (y/n)"
+    
+    if ($confirmation -ne "y" -and $confirmation -ne "Y" -and $confirmation -ne "") {
+        Write-Host "Release cancelled." -ForegroundColor Yellow
+        exit 0
+    }
+    
+    Write-Host "Deleting local tag..." -ForegroundColor Yellow
     git tag -d $tag
     if ($LASTEXITCODE -ne 0) { throw "Failed to delete local tag." }
     
