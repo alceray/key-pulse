@@ -29,7 +29,7 @@ public enum DeviceTypes
 [Table("Devices")]
 public class Device : ObservableObject
 {
-    private string _deviceName = "Unknown Device";
+    private string _deviceName = "";
     private TimeSpan _storedTotalUsage = TimeSpan.Zero;
     private DateTime? _sessionStartedAt;
     private DateTime? _lastConnectedAt;

@@ -14,9 +14,7 @@ Make startup behavior deterministic and aligned with intended product behavior.
 - **Status:** Completed.
 - **Implemented:** Startup mode resolution centralized in `ResolveRunInBackground()` with clear precedence:
   1. launch argument `--startup` forces tray mode for that process
-  2. otherwise build default applies:
-    - `Debug` => foreground window
-    - `Release` => tray/background
+  2. otherwise build default applies: `Debug` => foreground window, `Release` => tray/background
 - **Acceptance criteria:**
   - `Debug` launches foreground by default ✅
   - `Release` launches tray by default ✅
@@ -86,7 +84,7 @@ Use structured, persistent file logging for startup/runtime/shutdown diagnostics
   - `Services/UsbMonitorService.cs`
   - `Services/RawInputService.cs`
   - `Helpers/HeartbeatFile.cs`
-  - `Helpers/PowerShellScripts.cs`
+  - `Helpers/DeviceNameLookup.cs`
 - **Status:** Completed.
 - **Implemented:** Replaced `Debug.WriteLine(...)` with structured logging calls:
   - information
@@ -146,7 +144,6 @@ Make the app reliable as an always-running background utility.
   - warning-level logging on detection
 - **Example log output:**
   - `"RecoverFromCrash detected unclean shutdown; last AppStarted at {OrphanedSessionStart}"`
-  - `"RecoverFromCrash backfilled AppEnded and {Count} ConnectionEnded events at {CrashTime}; devices affected: {DeviceIds}; duration: {ElapsedMs}ms"`
 - **Acceptance criteria:**
   - crash recovery behavior is diagnosable from logs ✅
 
@@ -172,6 +169,27 @@ Make the app reliable as an always-running background utility.
   - single subsystem failure does not kill the entire app session ✅
   - app always comes up in tray/window even if WMI or Raw Input fails ✅
   - users are notified of degraded functionality ✅
+
+#### 3.4 Centralize configuration constants
+
+- **Files:** `Configuration/AppConstants.cs` (new)
+- **Status:** Completed.
+- **Why:** Magic strings scattered through code are hard to maintain, error-prone to refactor, and make behavior
+  non-obvious.
+- **Implemented:** Centralized all configuration constants under `AppConstants` with logical grouping:
+  - `App` group: app name, startup argument, activation event suffix
+  - `Paths` group: directory/file names for logs, settings, database, heartbeat
+  - `Logging` group: file retention policy, UI timeout durations
+  - `Registry` group: registry key paths, property names, GUIDs for device metadata lookup
+  - `UsbMonitoring` group: WMI polling intervals, signal aggregation windows, service names, device names
+- **Usage:** All services and helpers reference `AppConstants.*` instead of inline strings
+- **Benefits:**
+  - single source of truth for tunable/deployment-critical values
+  - easier to review what's configurable
+  - audit trail for changing behavior
+- **Acceptance criteria:**
+  - no magic strings in core services ✅
+  - constants are grouped logically by domain ✅
 
 ---
 
@@ -273,8 +291,8 @@ Make release output suitable for actual deployment.
 - **Implement:** Ensure installer/uninstaller does not remove:
   - `%AppData%\KeyPulse\devices.db`
   - logs unless user chooses full cleanup
-- **Implemented:** Inno Setup uninstall flow now prompts user whether to remove `%AppData%\KeyPulse` data; default
-  behavior preserves user data unless explicitly confirmed.
+- **Implemented:** Inno Setup uninstall flow now prompts user whether to remove
+  `%AppData%\KeyPulse` data; default behavior preserves user data unless explicitly confirmed.
 - **Acceptance criteria:**
   - upgrading app keeps history and settings intact (pending verification)
 
@@ -340,11 +358,19 @@ Lower support burden and avoid preventable failures.
 
 #### 7.1 Replace or reduce PowerShell dependency
 
-- **Files:** `Helpers/PowerShellScripts.cs`, callers in `UsbMonitorService` / helpers
+- **Files:** `Helpers/DeviceNameLookup.cs`, `Helpers/PowerShellScripts.cs`
+- **Status:** Completed.
 - **Why:** PowerShell in background apps can be slower, policy-restricted, and less reliable in enterprise environments.
 - **Implement:** Prefer direct Windows-native lookup if feasible (registry/SetupAPI/WMI without spawning PowerShell).
+- **Implemented:** `DeviceNameLookup.GetDeviceName()` now:
+  - attempts SetupAPI + cfgmgr32 P/Invoke first (native Windows calls, no PowerShell)
+  - falls back to `PowershellScripts.GetDeviceName()` only if SetupAPI fails
+  - refactored to eliminate internal PowerShell spawning logic (now delegates fallback to centralized
+    `PowershellScripts` helper)
+  - logs which resolution method succeeded for diagnostics
 - **Acceptance criteria:**
-  - device-name lookup no longer depends on launching PowerShell, or at least has strong fallback behavior
+  - device-name lookup never launches PowerShell in the normal/happy path ✅
+  - PowerShell is relegated to fallback-only for edge cases ✅
 
 #### 7.2 Add DB backup / migration safety plan
 
@@ -422,7 +448,7 @@ Support long-term maintenance.
   - better startup/registration failure handling
 - `Helpers/HeartbeatFile.cs`
   - structured logging
-- `Helpers/PowerShellScripts.cs`
+- `Helpers/DeviceNameLookup.cs`
   - structured logging
   - stronger fallback/error handling
 

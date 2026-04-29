@@ -3,6 +3,7 @@ using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Management;
 using System.Windows;
+using KeyPulse.Configuration;
 using KeyPulse.Helpers;
 using KeyPulse.Models;
 using Serilog;
@@ -25,8 +26,10 @@ public class UsbMonitorService : IDisposable
         (int KeyboardSignals, int MouseSignals, DateTime FirstTimestamp)
     > _cachedDevices = new();
 
-    private static readonly TimeSpan SignalAggregationWindow = TimeSpan.FromSeconds(1);
-    private readonly string _unknownDeviceName = "Unknown Device";
+    private static readonly TimeSpan SignalAggregationWindow = TimeSpan.FromSeconds(
+        AppConstants.UsbMonitoring.SignalAggregationSeconds
+    );
+
     private bool _disposed = false;
     private readonly DataService _dataService;
     private readonly Timer _heartbeatTimer;
@@ -49,8 +52,8 @@ public class UsbMonitorService : IDisposable
         _heartbeatTimer = new Timer(
             _ => HeartbeatFile.Write(),
             null,
-            TimeSpan.FromSeconds(30),
-            TimeSpan.FromSeconds(30)
+            TimeSpan.FromSeconds(AppConstants.UsbMonitoring.HeartbeatIntervalSeconds),
+            TimeSpan.FromSeconds(AppConstants.UsbMonitoring.HeartbeatIntervalSeconds)
         );
     }
 
@@ -64,7 +67,7 @@ public class UsbMonitorService : IDisposable
     {
         Log.Information("UsbMonitorService startup begin");
 
-        // SetCurrentDevicesFromSystem does WMI queries and PowerShell device-name lookups
+        // SetCurrentDevicesFromSystem does WMI queries and registry-based device-name lookups
         // which can take 1-3 seconds — run on a thread pool thread to keep the UI responsive.
         // Internal Dispatcher.Invoke calls marshal UI work back to the UI thread safely.
         try
@@ -208,19 +211,18 @@ public class UsbMonitorService : IDisposable
             var (keyboardSignals, mouseSignals, firstTimestamp) = cached;
 
             var device = _dataService.GetDevice(deviceId);
-            var existingType = device?.DeviceType ?? DeviceTypes.Unknown;
-            var deviceType = UsbDeviceClassifier.ResolveDeviceType(keyboardSignals, mouseSignals, existingType);
+            var deviceType = UsbDeviceClassifier.ResolveDeviceType(keyboardSignals, mouseSignals);
+            var deviceName = DeviceNameLookup.GetDeviceName(deviceId) ?? AppConstants.UsbMonitoring.UnknownDeviceName;
 
             if (device == null)
-            {
-                var deviceName = PowershellScripts.GetDeviceName(deviceId) ?? _unknownDeviceName;
                 device = new Device
                 {
                     DeviceId = deviceId,
                     DeviceType = deviceType,
                     DeviceName = deviceName,
                 };
-            }
+            else if (IsUnknownDeviceName(device.DeviceName))
+                device.DeviceName = deviceName;
 
             var connectedEvent = new DeviceEvent
             {
@@ -382,19 +384,19 @@ public class UsbMonitorService : IDisposable
                 );
 
                 var currDevice = DeviceList.FirstOrDefault(d => d.DeviceId == deviceId);
-                if (currDevice != null)
-                    currDevice.DeviceType = UsbDeviceClassifier.ResolveDeviceType(
-                        keyboardSignals,
-                        mouseSignals,
-                        currDevice.DeviceType
-                    );
-                else
+                var deviceType = UsbDeviceClassifier.ResolveDeviceType(keyboardSignals, mouseSignals);
+                var deviceName =
+                    DeviceNameLookup.GetDeviceName(deviceId) ?? AppConstants.UsbMonitoring.UnknownDeviceName;
+
+                if (currDevice == null)
                     currDevice = new Device
                     {
                         DeviceId = deviceId,
-                        DeviceName = PowershellScripts.GetDeviceName(deviceId) ?? _unknownDeviceName,
-                        DeviceType = UsbDeviceClassifier.ResolveDeviceType(keyboardSignals, mouseSignals),
+                        DeviceType = deviceType,
+                        DeviceName = deviceName,
                     };
+                else if (IsUnknownDeviceName(currDevice.DeviceName))
+                    currDevice.DeviceName = deviceName;
 
                 var connectionStartedEvent = new DeviceEvent
                 {
@@ -411,6 +413,16 @@ public class UsbMonitorService : IDisposable
         {
             Log.Error(ex, "ERROR in SetCurrentDevicesFromSystem");
         }
+    }
+
+    private static bool IsUnknownDeviceName(string? deviceName)
+    {
+        return string.IsNullOrWhiteSpace(deviceName)
+            || string.Equals(
+                deviceName,
+                AppConstants.UsbMonitoring.UnknownDeviceName,
+                StringComparison.OrdinalIgnoreCase
+            );
     }
 
     public void Dispose()
@@ -507,6 +519,7 @@ public class UsbMonitorService : IDisposable
             {
                 Log.Error(ex, "Error stopping remove WMI watcher");
             }
+
             wmiStopwatch.Stop();
 
             Log.Information("UsbMonitorService dispose completed in {ElapsedMs}ms", wmiStopwatch.ElapsedMilliseconds);

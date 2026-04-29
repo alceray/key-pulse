@@ -165,7 +165,28 @@ public class DataService
         try
         {
             using var ctx = _factory.CreateDbContext();
-            ctx.ActivitySnapshots.AddRange(snapshots);
+            foreach (var snapshot in snapshots)
+            {
+                var existing = ctx.ActivitySnapshots.SingleOrDefault(s =>
+                    s.DeviceId == snapshot.DeviceId && s.Minute == snapshot.Minute
+                );
+                if (existing != null)
+                {
+                    // Update existing snapshot (merge activity)
+                    existing.Keystrokes += snapshot.Keystrokes;
+                    existing.MouseClicks += snapshot.MouseClicks;
+                    existing.MouseMovementSeconds = Math.Max(
+                        existing.MouseMovementSeconds,
+                        snapshot.MouseMovementSeconds
+                    );
+                }
+                else
+                {
+                    // Insert new snapshot
+                    ctx.ActivitySnapshots.Add(snapshot);
+                }
+            }
+
             ctx.SaveChanges();
         }
         catch (Exception ex)

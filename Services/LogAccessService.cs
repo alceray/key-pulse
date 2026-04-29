@@ -1,6 +1,7 @@
 ﻿using System.Diagnostics;
 using System.IO;
 using System.Reflection;
+using KeyPulse.Configuration;
 
 namespace KeyPulse.Services;
 
@@ -10,9 +11,9 @@ public class LogAccessService
 
     public LogAccessService()
     {
-        var appName = Assembly.GetExecutingAssembly().GetName().Name ?? "KeyPulse";
+        var appName = Assembly.GetExecutingAssembly().GetName().Name ?? AppConstants.App.DefaultName;
         var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-        _logDirectory = Path.Combine(appData, appName, "Logs");
+        _logDirectory = Path.Combine(appData, appName, AppConstants.Paths.LogsDirectoryName);
         Directory.CreateDirectory(_logDirectory);
     }
 
@@ -24,7 +25,7 @@ public class LogAccessService
             return [];
 
         return Directory
-            .GetFiles(_logDirectory, "*.log", SearchOption.TopDirectoryOnly)
+            .GetFiles(_logDirectory, AppConstants.Paths.LogFilePattern, SearchOption.TopDirectoryOnly)
             .Select(Path.GetFileName)
             .Where(name => !string.IsNullOrWhiteSpace(name))
             .Cast<string>()

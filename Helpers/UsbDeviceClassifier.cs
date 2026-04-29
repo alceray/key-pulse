@@ -28,14 +28,8 @@ internal static class UsbDeviceClassifier
         return null;
     }
 
-    internal static DeviceTypes ResolveDeviceType(
-        int keyboardSignals,
-        int mouseSignals,
-        DeviceTypes existingType = DeviceTypes.Unknown
-    )
+    internal static DeviceTypes ResolveDeviceType(int keyboardSignals, int mouseSignals)
     {
-        if (existingType is DeviceTypes.Keyboard or DeviceTypes.Mouse)
-            return existingType;
         if (keyboardSignals == 1 && mouseSignals == 1)
             return DeviceTypes.Mouse;
         if (keyboardSignals == 2 && mouseSignals == 1)

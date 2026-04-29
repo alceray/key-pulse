@@ -1,5 +1,6 @@
 ﻿using System.IO;
 using System.Reflection;
+using KeyPulse.Configuration;
 using KeyPulse.Models;
 using Microsoft.EntityFrameworkCore;
 
@@ -14,11 +15,11 @@ public class ApplicationDbContext : DbContext
     private static string GetDatabasePath()
     {
         var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-        var appName = Assembly.GetExecutingAssembly().GetName().Name ?? "KeyPulse";
+        var appName = Assembly.GetExecutingAssembly().GetName().Name ?? AppConstants.App.DefaultName;
         var appFolder = Path.Combine(appData, appName);
         if (!Directory.Exists(appFolder))
             Directory.CreateDirectory(appFolder);
-        return Path.Combine(appFolder, "devices.db");
+        return Path.Combine(appFolder, AppConstants.Paths.DatabaseFileName);
     }
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)

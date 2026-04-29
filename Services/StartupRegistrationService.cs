@@ -1,4 +1,5 @@
 ﻿using System.Reflection;
+using KeyPulse.Configuration;
 using Microsoft.Win32;
 using Serilog;
 
@@ -6,19 +7,18 @@ namespace KeyPulse.Services;
 
 public class StartupRegistrationService
 {
-    private const string RunKeyPath = "Software\\Microsoft\\Windows\\CurrentVersion\\Run";
     private readonly string _appName;
 
     public StartupRegistrationService()
     {
-        _appName = Assembly.GetExecutingAssembly().GetName().Name ?? "KeyPulse";
+        _appName = Assembly.GetExecutingAssembly().GetName().Name ?? AppConstants.App.DefaultName;
     }
 
     public bool IsEnabled()
     {
         try
         {
-            using var runKey = Registry.CurrentUser.OpenSubKey(RunKeyPath, writable: false);
+            using var runKey = Registry.CurrentUser.OpenSubKey(AppConstants.Registry.RunKeyPath, false);
             var value = runKey?.GetValue(_appName) as string;
             return !string.IsNullOrWhiteSpace(value);
         }
@@ -33,7 +33,7 @@ public class StartupRegistrationService
     {
         try
         {
-            using var runKey = Registry.CurrentUser.CreateSubKey(RunKeyPath, writable: true);
+            using var runKey = Registry.CurrentUser.CreateSubKey(AppConstants.Registry.RunKeyPath, true);
             var command = BuildCommand();
             runKey.SetValue(_appName, command, RegistryValueKind.String);
             Log.Information("Enabled startup registration for {AppName}; Command={Command}", _appName, command);
@@ -49,11 +49,11 @@ public class StartupRegistrationService
     {
         try
         {
-            using var runKey = Registry.CurrentUser.OpenSubKey(RunKeyPath, writable: true);
+            using var runKey = Registry.CurrentUser.OpenSubKey(AppConstants.Registry.RunKeyPath, true);
             if (runKey?.GetValue(_appName) == null)
                 return;
 
-            runKey.DeleteValue(_appName, throwOnMissingValue: false);
+            runKey.DeleteValue(_appName, false);
             Log.Information("Disabled startup registration for {AppName}", _appName);
         }
         catch (Exception ex)
@@ -70,6 +70,6 @@ public class StartupRegistrationService
             throw new InvalidOperationException("Unable to determine current executable path for startup registration");
 
         var quotedPath = $"\"{executablePath}\"";
-        return $"{quotedPath} --startup";
+        return $"{quotedPath} {AppConstants.App.StartupArgument}";
     }
 }

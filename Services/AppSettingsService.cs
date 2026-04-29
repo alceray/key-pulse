@@ -1,5 +1,7 @@
 ﻿using System.IO;
+using System.Reflection;
 using System.Text.Json;
+using KeyPulse.Configuration;
 using KeyPulse.Models;
 using Serilog;
 
@@ -15,11 +17,11 @@ public class AppSettingsService
 
     public AppSettingsService()
     {
-        _appName = AppDomain.CurrentDomain.FriendlyName.Replace(".exe", "", StringComparison.OrdinalIgnoreCase);
+        _appName = Assembly.GetExecutingAssembly().GetName().Name ?? AppConstants.App.DefaultName;
         var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
         var settingsDirectory = Path.Combine(appData, _appName);
         Directory.CreateDirectory(settingsDirectory);
-        _settingsFilePath = Path.Combine(settingsDirectory, "settings.json");
+        _settingsFilePath = Path.Combine(settingsDirectory, AppConstants.Paths.SettingsFileName);
     }
 
     public AppUserSettings GetSettings()

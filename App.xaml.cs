@@ -4,6 +4,7 @@ using System.IO;
 using System.Reflection;
 using System.Windows;
 using System.Windows.Forms;
+using KeyPulse.Configuration;
 using KeyPulse.Data;
 using KeyPulse.Models;
 using KeyPulse.Services;
@@ -34,7 +35,7 @@ public partial class App : System.Windows.Application
 
     protected override async void OnStartup(StartupEventArgs e)
     {
-        _appName = Assembly.GetExecutingAssembly().GetName().Name ?? "KeyPulse";
+        _appName = Assembly.GetExecutingAssembly().GetName().Name ?? AppConstants.App.DefaultName;
         ConfigureLogging(_appName);
         Log.Information("{AppName} startup initiated", _appName);
 
@@ -137,7 +138,7 @@ public partial class App : System.Windows.Application
 
     protected override void OnExit(ExitEventArgs e)
     {
-        Log.Information("{AppName} shutdown initiated", _appName ?? "KeyPulse");
+        Log.Information("{AppName} shutdown initiated", _appName ?? AppConstants.App.DefaultName);
         try
         {
             _activateEventRegistration?.Unregister(null);
@@ -150,7 +151,7 @@ public partial class App : System.Windows.Application
             _rawInputService?.Dispose();
             _usbMonitorService?.Dispose();
             ServiceProvider.Dispose();
-            Log.Information("{AppName} shutdown completed", _appName ?? "KeyPulse");
+            Log.Information("{AppName} shutdown completed", _appName ?? AppConstants.App.DefaultName);
         }
         catch (Exception ex)
         {
@@ -194,12 +195,14 @@ public partial class App : System.Windows.Application
 
     private static bool ShouldForceTrayFromArgs(IEnumerable<string> args)
     {
-        return args.Any(arg => string.Equals(arg, "--startup", StringComparison.OrdinalIgnoreCase));
+        return args.Any(arg =>
+            string.Equals(arg, AppConstants.App.StartupArgument, StringComparison.OrdinalIgnoreCase)
+        );
     }
 
     private static string GetActivationEventName(string appName)
     {
-        return $"{appName}.ACTIVATE";
+        return $"{appName}{AppConstants.App.ActivationEventSuffix}";
     }
 
     private static void ConfigureLogging(string appName)
@@ -207,7 +210,7 @@ public partial class App : System.Windows.Application
         try
         {
             var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-            var logDirectory = Path.Combine(appData, appName, "Logs");
+            var logDirectory = Path.Combine(appData, appName, AppConstants.Paths.LogsDirectoryName);
             Directory.CreateDirectory(logDirectory);
 
             var loggerConfiguration = new LoggerConfiguration().Enrich.FromLogContext();
@@ -219,9 +222,9 @@ public partial class App : System.Windows.Application
 
             Log.Logger = loggerConfiguration
                 .WriteTo.File(
-                    Path.Combine(logDirectory, "keypulse-.log"),
+                    Path.Combine(logDirectory, AppConstants.Paths.RollingLogFileTemplate),
                     rollingInterval: RollingInterval.Day,
-                    retainedFileCountLimit: 14,
+                    retainedFileCountLimit: AppConstants.Logging.RetainedFileCountLimit,
                     shared: true
                 )
                 .CreateLogger();
@@ -363,7 +366,12 @@ public partial class App : System.Windows.Application
         try
         {
             if (RunInBackground && _trayIcon != null)
-                _trayIcon.ShowBalloonTip(5000, "Startup Warning", message, ToolTipIcon.Warning);
+                _trayIcon.ShowBalloonTip(
+                    AppConstants.Logging.StartupWarningBalloonTimeoutMs,
+                    "Startup Warning",
+                    message,
+                    ToolTipIcon.Warning
+                );
             else if (!RunInBackground && MainWindow != null)
                 MainWindow.Dispatcher.BeginInvoke(() =>
                 {
