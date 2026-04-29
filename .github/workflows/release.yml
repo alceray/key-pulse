@@ -27,7 +27,9 @@ jobs:
 
       - name: Restore & Publish
         shell: pwsh
-        run: dotnet publish -c Release -r win-x64 --no-self-contained -o publish\ /p:Version=${{ steps.version.outputs.VERSION }} /p:FileVersion=${{ steps.version.outputs.VERSION }}.0
+        run: |
+          dotnet restore ".\KeyPulse Signal.sln"
+          dotnet publish ".\KeyPulse.csproj" -c Release -r win-x64 --no-self-contained -o publish\ /p:Version=${{ steps.version.outputs.VERSION }} /p:FileVersion=${{ steps.version.outputs.VERSION }}.0
 
       - name: Install Inno Setup
         uses: Minionguyjpro/Inno-Setup-Action@v1.2.4
