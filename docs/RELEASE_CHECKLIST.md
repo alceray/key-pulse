@@ -8,37 +8,15 @@
 
 ## Release
 
-```powershell
-git tag v1.x.x
-git push origin v1.x.x
-```
-
-GitHub Actions will automatically:
-- Inject version from the tag into the app and installer
-- Restore, build, and publish the app
-- Compile the installer with the correct version
-- Create a GitHub Release with the installer and changelog attached
-
+- [ ] Run the release command from `docs/RELEASE_PROCESS.md` -> `How to Cut a Release`.
 - [ ] Confirm GitHub Actions workflow completed successfully.
 - [ ] Confirm installer is attached to the GitHub Release.
 - [ ] Confirm installer filename includes version.
 
-## Manual Build (local fallback only)
-
-```powershell
-Set-Location "D:\Projects\visual-studio\key-pulse"
-dotnet restore
-dotnet publish -c Release -r win-x64 --no-self-contained -o publish\
-iscc "installer\KeyPulse.iss"
-```
-
 ## Optional Signing
 
-```powershell
-.\scripts\Sign-ReleaseArtifacts.ps1
-```
-
-- [ ] Verify signature if signing is enabled.
+- [ ] If signing is enabled, run `.\scripts\Sign-ReleaseArtifacts.ps1`.
+- [ ] Verify signature.
 
 ## Upgrade Validation (Installer-Driven)
 

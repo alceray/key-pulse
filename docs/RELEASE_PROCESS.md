@@ -1,5 +1,7 @@
 ﻿# KeyPulse Release Process
 
+This document is the canonical release runbook (commands and behavior details). Use `docs/RELEASE_CHECKLIST.md` as the execution checklist.
+
 ## Versioning Scheme
 
 The git tag is the single source of truth for release versions. The workflow automatically injects versions from the tag into the build — no manual version bumps in `KeyPulse.csproj` or `installer/KeyPulse.iss` are required for GitHub releases.
@@ -22,23 +24,27 @@ Pushing a version tag triggers the release workflow (`.github/workflows/release.
 
 1. Add an entry to `CHANGELOG.md`.
 2. Commit and push.
-3. Push a version tag:
+3. Push a version tag with the helper script:
    ```powershell
-   git tag v1.2.0
-   git push origin v1.2.0
+   .\scripts\New-Release.ps1 -Version "1.2.0"
    ```
-4. GitHub Actions builds and publishes the release automatically.
+4. The script validates a clean working tree and prevents duplicate tags.
+5. GitHub Actions builds and publishes the release automatically.
 
-## Manual Build (local fallback)
+Manual fallback:
 
 ```powershell
-Set-Location "D:\Projects\visual-studio\key-pulse"
-dotnet restore
-dotnet publish -c Release -r win-x64 --no-self-contained -o publish\
-iscc "installer\KeyPulse.iss"
+git tag v1.2.0
+git push origin v1.2.0
 ```
 
-Local builds use the version hardcoded in `KeyPulse.csproj` and `installer/KeyPulse.iss`.
+## Manual Build (local testing)
+
+```powershell
+.\scripts\Build-Release.ps1 -Version "1.2.0"
+```
+
+Omit `-Version` to use the default version in `KeyPulse.csproj`.
 
 ## Update Strategy
 
