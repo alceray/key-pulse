@@ -1,4 +1,4 @@
-﻿# KeyPulse Release Checklist
+﻿# KeyPulse Signal Release Checklist
 
 ## Pre-Release
 

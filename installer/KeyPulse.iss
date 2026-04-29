@@ -1,13 +1,13 @@
-﻿; KeyPulse Installer Script
+; KeyPulse Signal Installer Script
 ; Build publish output first:
 ;   dotnet publish -c Release -r win-x64 --no-self-contained -o ..\publish\
 
-#define AppName "KeyPulse"
+#define AppName "KeyPulse Signal"
 #ifndef AppVersion
   #define AppVersion "1.1.0"
 #endif
-#define AppPublisher "KeyPulse"
-#define AppExeName "KeyPulse.exe"
+#define AppPublisher "KeyPulse Signal"
+#define AppExeName "KeyPulse Signal.exe"
 
 [Setup]
 AppName={#AppName}
@@ -17,7 +17,7 @@ AppId={{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}
 DefaultDirName={autopf}\{#AppName}
 DefaultGroupName={#AppName}
 OutputDir=output
-OutputBaseFilename=KeyPulse-Setup-{#AppVersion}
+OutputBaseFilename=KeyPulse-Signal-Setup-{#AppVersion}
 SetupIconFile=..\Assets\keyboard_mouse_icon.ico
 Compression=lzma
 SolidCompression=yes
@@ -54,12 +54,12 @@ function RemoveUserDataPrompt(): Boolean;
 begin
   Result :=
     MsgBox(
-      'Do you also want to remove KeyPulse user data?' + #13#10 + #13#10 +
+      'Do you also want to remove KeyPulse Signal user data?' + #13#10 + #13#10 +
       'This deletes:' + #13#10 +
       '- Device history' + #13#10 +
       '- Activity logs' + #13#10 +
       '- Settings' + #13#10 + #13#10 +
-      'Location: ' + ExpandConstant('{userappdata}\KeyPulse'),
+      'Location: ' + ExpandConstant('{userappdata}\KeyPulse Signal'),
       mbConfirmation,
       MB_YESNO
     ) = IDYES;
@@ -72,7 +72,7 @@ begin
   // usPostUninstall means app uninstall already completed successfully
   if CurUninstallStep = usPostUninstall then
   begin
-    UserDataPath := ExpandConstant('{userappdata}\KeyPulse');
+    UserDataPath := ExpandConstant('{userappdata}\KeyPulse Signal');
 
     if DirExists(UserDataPath) then
     begin

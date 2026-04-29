@@ -1,6 +1,6 @@
-# KeyPulse
+# KeyPulse Signal
 
-KeyPulse is a Windows-only WPF app for tracking USB keyboards and mice.
+KeyPulse Signal is a Windows-only WPF app for tracking USB keyboards and mice.
 It monitors connection/disconnection events, keeps a per-device event history,
 captures minute-level raw input activity, and stores everything in a local SQLite database.
 
@@ -9,7 +9,7 @@ captures minute-level raw input activity, and stores everything in a local SQLit
 - Windows only
 - Not supported on macOS or Linux
 
-KeyPulse targets `.NET 8` with `net8.0-windows` and depends on Windows-specific technologies including WPF,
+KeyPulse Signal targets `.NET 8` with `net8.0-windows` and depends on Windows-specific technologies including WPF,
 WMI (`System.Management`), Windows Raw Input (`WM_INPUT`), and the WinForms tray icon API.
 
 ## What It Does
@@ -54,7 +54,8 @@ WMI (`System.Management`), Windows Raw Input (`WM_INPUT`), and the WinForms tray
 
 ## Runtime Behavior Worth Knowing
 
-- Single-instance per build mode: one `Debug` and one `Release` instance can run at the same time; launching another instance in the same mode signals that mode's existing instance to restore/focus.
+- Single-instance per build mode: one `Debug` and one
+  `Release` instance can run at the same time; launching another instance in the same mode signals that mode's existing instance to restore/focus.
 - Startup flow:
   - runs database migrations,
   - recovers from an unclean previous shutdown if needed,
@@ -106,8 +107,8 @@ Launch argument override:
 ## Troubleshooting
 
 - Launching a second instance does not open a new window:
-  - expected behavior; KeyPulse is single-instance and should restore/focus the running instance.
-- Build fails because `KeyPulse.exe` is locked:
+  - expected behavior; KeyPulse Signal is single-instance and should restore/focus the running instance.
+- Build fails because `KeyPulse Signal.exe` is locked:
   - stop the running app before rebuilding Debug output.
 - Device name appears as `Unknown Device`:
   - Windows did not provide a friendly name for that device ID at lookup time.
@@ -152,7 +153,8 @@ Release/versioning details live in:
 - `docs/RELEASE_CHECKLIST.md`
 - `CHANGELOG.md`
 
-GitHub releases are tag-driven. Push a `v*.*.*` tag and the workflow handles versioning, building, and publishing automatically. See `docs/RELEASE_PROCESS.md`.
+GitHub releases are tag-driven. Push a
+`v*.*.*` tag and the workflow handles versioning, building, and publishing automatically. See `docs/RELEASE_PROCESS.md`.
 
 For installed users, updates are installer-driven: run the latest installer over the existing install.
 

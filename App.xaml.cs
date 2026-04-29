@@ -1,7 +1,6 @@
 ﻿using System.ComponentModel;
 using System.Drawing;
 using System.IO;
-using System.Reflection;
 using System.Windows;
 using System.Windows.Forms;
 using KeyPulse.Configuration;
@@ -35,7 +34,7 @@ public partial class App : System.Windows.Application
 
     protected override async void OnStartup(StartupEventArgs e)
     {
-        _appName = Assembly.GetExecutingAssembly().GetName().Name ?? AppConstants.App.DefaultName;
+        _appName = AppConstants.App.DefaultName;
         var instanceId = GetInstanceId(_appName);
         ConfigureLogging();
         Log.Information("{AppName} startup initiated", _appName);
@@ -100,6 +99,7 @@ public partial class App : System.Windows.Application
         else
         {
             MainWindow = new MainWindow();
+            MainWindow.Title = _appName;
             MainWindow.Closing += MainWindow_Closing;
             MainWindow.Show();
         }
@@ -398,6 +398,7 @@ public partial class App : System.Windows.Application
         if (MainWindow == null)
         {
             MainWindow = new MainWindow();
+            MainWindow.Title = _appName;
             MainWindow.Closing += MainWindow_Closing;
         }
 

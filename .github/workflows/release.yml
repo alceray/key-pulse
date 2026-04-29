@@ -38,6 +38,6 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: installer/output/KeyPulse-Setup-*.exe
+          files: installer/output/KeyPulse-Signal-Setup-*.exe
           body_path: CHANGELOG.md
 

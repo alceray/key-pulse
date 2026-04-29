@@ -1,10 +1,17 @@
-﻿namespace KeyPulse.Configuration;
+﻿using System.Reflection;
+
+namespace KeyPulse.Configuration;
 
 public static class AppConstants
 {
     public static class App
     {
-        public const string DefaultName = "KeyPulse";
+        public static string ProductName => Assembly.GetExecutingAssembly().GetName().Name ?? "KeyPulse Signal";
+#if DEBUG
+        public static string DefaultName => ProductName + " (Test)";
+#else
+        public static string DefaultName => ProductName;
+#endif
         public const string StartupArgument = "--startup";
         public const string ActivationEventSuffix = ".ACTIVATE";
     }

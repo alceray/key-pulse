@@ -1,15 +1,18 @@
-﻿# KeyPulse Release Process
+﻿# KeyPulse Signal Release Process
 
-This document is the canonical release runbook (commands and behavior details). Use `docs/RELEASE_CHECKLIST.md` as the execution checklist.
+This document is the canonical release runbook (commands and behavior details). Use
+`docs/RELEASE_CHECKLIST.md` as the execution checklist.
 
 ## Versioning Scheme
 
-The git tag is the single source of truth for release versions. The workflow automatically injects versions from the tag into the build — no manual version bumps in `KeyPulse.csproj` or `installer/KeyPulse.iss` are required for GitHub releases.
+The git tag is the single source of truth for release versions. The workflow automatically injects versions from the tag into the build — no manual version bumps in
+`KeyPulse.csproj` or `installer/KeyPulse.iss` are required for GitHub releases.
 
 - `KeyPulse.csproj` `Version` and `FileVersion` are overridden at publish time via MSBuild `/p:` args
 - `installer/KeyPulse.iss` `AppVersion` is overridden at compile time via `/DAppVersion=...`
 
-`KeyPulse.csproj` may keep a developer-default version (e.g. `1.1.0`) for local builds. It does not need to be bumped before tagging.
+`KeyPulse.csproj` may keep a developer-default version (e.g.
+`1.1.0`) for local builds. It does not need to be bumped before tagging.
 
 ## Automated Release (GitHub Actions)
 
@@ -48,18 +51,18 @@ Omit `-Version` to use the default version in `KeyPulse.csproj`.
 
 ## Update Strategy
 
-KeyPulse updates are installer-driven:
+KeyPulse Signal updates are installer-driven:
 
 1. Download the latest installer from the GitHub Release.
 2. Run it over the existing install — do not uninstall first.
 3. Installer upgrades in place (`AppId` is unchanged).
-4. User data in `%AppData%\KeyPulse` is preserved unless explicitly removed during uninstall.
+4. User data in `%AppData%\KeyPulse Signal` is preserved unless explicitly removed during uninstall.
 
 ## Verification
 
 - App launches and reports expected version.
 - Upgrade preserves:
-  - `%AppData%\KeyPulse\keypulse-data.db`
-  - `%AppData%\KeyPulse\settings.json`
-  - `%AppData%\KeyPulse\Logs\`
+  - `%AppData%\KeyPulse Signal\keypulse-data.db`
+  - `%AppData%\KeyPulse Signal\settings.json`
+  - `%AppData%\KeyPulse Signal\Logs\`
 - Installer filename includes the release version.

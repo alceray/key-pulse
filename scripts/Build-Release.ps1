@@ -13,7 +13,7 @@ $ErrorActionPreference = "Stop"
 $root = Split-Path $PSScriptRoot -Parent
 Set-Location $root
 
-Write-Host "=== KeyPulse Local Release Build ===" -ForegroundColor Cyan
+Write-Host "=== KeyPulse Signal Local Release Build ===" -ForegroundColor Cyan
 
 # Resolve version
 if (-not $Version) {
@@ -45,7 +45,7 @@ if (-not $iscc) {
 if ($LASTEXITCODE -ne 0) { throw "Inno Setup build failed." }
 
 # Confirm output
-$installer = Get-ChildItem "installer\output\KeyPulse-Setup-*.exe" -ErrorAction SilentlyContinue |
+$installer = Get-ChildItem "installer\output\KeyPulse-Signal-Setup-*.exe" -ErrorAction SilentlyContinue |
     Sort-Object LastWriteTime -Descending |
     Select-Object -First 1
 
