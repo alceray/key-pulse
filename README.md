@@ -54,7 +54,7 @@ WMI (`System.Management`), Windows Raw Input (`WM_INPUT`), and the WinForms tray
 
 ## Runtime Behavior Worth Knowing
 
-- Single-instance app: launching a second instance signals the existing instance to restore/focus its main window.
+- Single-instance per build mode: one `Debug` and one `Release` instance can run at the same time; launching another instance in the same mode signals that mode's existing instance to restore/focus.
 - Startup flow:
   - runs database migrations,
   - recovers from an unclean previous shutdown if needed,

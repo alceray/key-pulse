@@ -36,6 +36,7 @@ public partial class App : System.Windows.Application
     protected override async void OnStartup(StartupEventArgs e)
     {
         _appName = Assembly.GetExecutingAssembly().GetName().Name ?? AppConstants.App.DefaultName;
+        var instanceId = GetInstanceId(_appName);
         ConfigureLogging();
         Log.Information("{AppName} startup initiated", _appName);
 
@@ -54,11 +55,11 @@ public partial class App : System.Windows.Application
             _usbMonitorService?.Dispose();
         };
 
-        _appMutex = new Mutex(true, _appName, out var canCreateApp);
+        _appMutex = new Mutex(true, instanceId, out var canCreateApp);
         if (!canCreateApp)
         {
-            Log.Information("Secondary instance detected; signaling active instance");
-            if (!SignalExistingInstance(_appName))
+            Log.Information("Secondary instance detected for {InstanceId}; signaling active instance", instanceId);
+            if (!SignalExistingInstance(instanceId))
             {
                 Log.Warning("Failed to signal existing instance; showing already-running message");
                 System.Windows.MessageBox.Show(
@@ -72,7 +73,7 @@ public partial class App : System.Windows.Application
             Environment.Exit(0);
         }
 
-        InitializeActivationSignalListener();
+        InitializeActivationSignalListener(instanceId);
 
         var services = new ServiceCollection();
         ConfigureServices(services);
@@ -205,6 +206,20 @@ public partial class App : System.Windows.Application
         return $"{appName}{AppConstants.App.ActivationEventSuffix}";
     }
 
+    private static string GetInstanceId(string appName)
+    {
+        return $"{appName}.{GetBuildModeName()}";
+    }
+
+    private static string GetBuildModeName()
+    {
+#if DEBUG
+        return "Debug";
+#else
+        return "Release";
+#endif
+    }
+
     private static void ConfigureLogging()
     {
         try
@@ -212,12 +227,7 @@ public partial class App : System.Windows.Application
             var logDirectory = AppDataPaths.GetPath(AppConstants.Paths.LogsDirectoryName);
             Directory.CreateDirectory(logDirectory);
 
-            var loggerConfiguration = new LoggerConfiguration().Enrich.FromLogContext();
-#if DEBUG
-            loggerConfiguration = loggerConfiguration.MinimumLevel.Debug();
-#else
-            loggerConfiguration = loggerConfiguration.MinimumLevel.Information();
-#endif
+            var loggerConfiguration = new LoggerConfiguration().Enrich.FromLogContext().MinimumLevel.Debug();
 
             Log.Logger = loggerConfiguration
                 .WriteTo.File(
@@ -234,9 +244,9 @@ public partial class App : System.Windows.Application
         }
     }
 
-    private void InitializeActivationSignalListener()
+    private void InitializeActivationSignalListener(string instanceId)
     {
-        _activateEvent = new EventWaitHandle(false, EventResetMode.AutoReset, GetActivationEventName(_appName!));
+        _activateEvent = new EventWaitHandle(false, EventResetMode.AutoReset, GetActivationEventName(instanceId));
         _activateEventRegistration = ThreadPool.RegisterWaitForSingleObject(
             _activateEvent,
             (_, _) => Dispatcher.BeginInvoke(new Action(ShowMainWindow)),
@@ -246,20 +256,20 @@ public partial class App : System.Windows.Application
         );
         Log.Debug(
             "Activation signal listener initialized for {ActivationEventName}",
-            GetActivationEventName(_appName!)
+            GetActivationEventName(instanceId)
         );
     }
 
-    private static bool SignalExistingInstance(string appName)
+    private static bool SignalExistingInstance(string instanceId)
     {
         try
         {
-            using var activateEvent = EventWaitHandle.OpenExisting(GetActivationEventName(appName));
+            using var activateEvent = EventWaitHandle.OpenExisting(GetActivationEventName(instanceId));
             return activateEvent.Set();
         }
         catch
         {
-            Log.Warning("Activation signal event was not available for {AppName}", appName);
+            Log.Warning("Activation signal event was not available for {InstanceId}", instanceId);
             return false;
         }
     }

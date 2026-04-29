@@ -2,5 +2,5 @@
 
 public class AppUserSettings
 {
-    public bool LaunchOnLogin { get; set; }
+    public bool LaunchOnLogin { get; set; } = true;
 }
