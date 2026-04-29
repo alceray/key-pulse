@@ -5,6 +5,7 @@
   xmlns:iconPacks="http://metro.mahapps.com/winfx/xaml/iconpacks"
   Height="Auto"
   Width="Auto"
+  PreviewKeyDown="OnPreviewKeyDown"
 >
   <Grid Margin="16">
     <Grid.ColumnDefinitions>
@@ -30,15 +31,13 @@
     <Grid Grid.Row="0" Grid.Column="1">
       <Grid.RowDefinitions>
         <RowDefinition Height="Auto" />
-        <RowDefinition Height="Auto" />
         <RowDefinition Height="*" />
       </Grid.RowDefinitions>
 
-      <!-- Logs section header -->
-
-      <Grid Grid.Row="1" Margin="0,0,0,8">
+      <Grid Grid.Row="0" Margin="0,0,0,8">
         <Grid.ColumnDefinitions>
           <ColumnDefinition Width="*" />
+          <ColumnDefinition Width="240" />
           <ColumnDefinition Width="Auto" />
           <ColumnDefinition Width="Auto" />
           <ColumnDefinition Width="Auto" />
@@ -54,8 +53,28 @@
           VerticalContentAlignment="Center"
         />
 
-        <!-- Filter dropdown -->
         <Grid Grid.Column="1" Margin="8,0,0,0">
+          <TextBox
+            x:Name="LogSearchTextBox"
+            VerticalContentAlignment="Center"
+            Padding="6,0,64,0"
+            Text="{Binding SearchQuery, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+            KeyDown="OnLogSearchTextBoxKeyDown"
+          />
+
+          <TextBlock
+            x:Name="SearchResultCounterText"
+            HorizontalAlignment="Right"
+            VerticalAlignment="Center"
+            Margin="0,0,12,0"
+            Foreground="#88000000"
+            IsHitTestVisible="False"
+            Visibility="Collapsed"
+          />
+        </Grid>
+
+        <!-- Filter dropdown -->
+        <Grid Grid.Column="2" Margin="8,0,0,0">
           <ToggleButton x:Name="FilterToggle" Width="36" Height="32" VerticalAlignment="Center" ToolTip="Filters">
             <iconPacks:PackIconPhosphorIcons Kind="Funnel" Width="16" Height="16" />
           </ToggleButton>
@@ -92,7 +111,7 @@
 
         <!-- Refresh -->
         <Button
-          Grid.Column="2"
+          Grid.Column="3"
           Width="36"
           Height="32"
           Margin="8,0,0,0"
@@ -104,7 +123,7 @@
 
         <!-- Copy -->
         <Button
-          Grid.Column="3"
+          Grid.Column="4"
           Width="36"
           Height="32"
           Margin="4,0,0,0"
@@ -116,7 +135,7 @@
 
         <!-- Open Folder -->
         <Button
-          Grid.Column="4"
+          Grid.Column="5"
           Width="36"
           Height="32"
           Margin="4,0,0,0"
@@ -127,20 +146,19 @@
         </Button>
       </Grid>
 
-      <Border Grid.Row="2" BorderBrush="#33000000" BorderThickness="1" CornerRadius="4" Padding="8">
-        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
-          <TextBox
-            Text="{Binding LogContent, Mode=OneWay}"
-            IsReadOnly="True"
-            TextWrapping="NoWrap"
-            BorderThickness="0"
-            Background="Transparent"
-            FontFamily="Consolas"
-            FontSize="12"
-            AcceptsReturn="True"
-            AcceptsTab="True"
-          />
-        </ScrollViewer>
+      <Border Grid.Row="1" BorderBrush="#33000000" BorderThickness="1" CornerRadius="4" Padding="8">
+        <RichTextBox
+          x:Name="LogViewer"
+          IsReadOnly="True"
+          IsReadOnlyCaretVisible="False"
+          IsDocumentEnabled="False"
+          BorderThickness="0"
+          Background="Transparent"
+          FontFamily="Consolas"
+          FontSize="12"
+          VerticalScrollBarVisibility="Auto"
+          HorizontalScrollBarVisibility="Auto"
+        />
       </Border>
     </Grid>
 

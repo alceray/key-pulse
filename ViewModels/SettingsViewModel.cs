@@ -14,11 +14,12 @@ namespace KeyPulse.ViewModels;
 
 public class SettingsViewModel : ObservableObject, IDisposable
 {
+    private const string AllLabel = "All";
     private static readonly Regex TimestampPattern = new(@"^\d{4}-\d{2}-\d{2}", RegexOptions.Compiled);
 
     private static readonly (string Name, bool DefaultSelected)[] FilterDefinitions =
     [
-        ("All", false),
+        (AllLabel, false),
         ("Fatal", true),
         ("Error", true),
         ("Warning", false),
@@ -34,6 +35,7 @@ public class SettingsViewModel : ObservableObject, IDisposable
     private bool _suppressAutoSave;
     private bool _syncingFilters;
     private string? _selectedLogFile;
+    private string _searchQuery = string.Empty;
     private string _rawLogContent = string.Empty;
     private string _logContent = string.Empty;
     private string _statusMessage = "";
@@ -109,7 +111,10 @@ public class SettingsViewModel : ObservableObject, IDisposable
         get
         {
             var selected = LogFilters.Where(f => f.IsSelected).Select(f => f.Name).ToList();
-            return selected.Count == 0 || selected.Contains("All") ? "All" : string.Join(", ", selected);
+            if (selected.Count == 0)
+                return AllLabel;
+
+            return selected.Contains(AllLabel) ? AllLabel : string.Join(", ", selected);
         }
     }
 
@@ -124,6 +129,20 @@ public class SettingsViewModel : ObservableObject, IDisposable
             _selectedLogFile = value;
             OnPropertyChanged();
             LoadSelectedLogContent();
+        }
+    }
+
+    public string SearchQuery
+    {
+        get => _searchQuery;
+        set
+        {
+            var normalized = value;
+            if (_searchQuery == normalized)
+                return;
+
+            _searchQuery = normalized;
+            OnPropertyChanged();
         }
     }
 
@@ -237,7 +256,8 @@ public class SettingsViewModel : ObservableObject, IDisposable
             return;
 
         foreach (var filter in LogFilters)
-            filter.Count = filter.Name == "All" ? CountTotalEntries() : CountLogEntries(GetTokenForLevel(filter.Name));
+            filter.Count =
+                filter.Name == AllLabel ? CountTotalEntries() : CountLogEntries(GetTokenForLevel(filter.Name));
     }
 
     public ICommand RefreshLogsCommand { get; }
@@ -369,33 +389,43 @@ public class SettingsViewModel : ObservableObject, IDisposable
             return;
 
         var selectedNames = LogFilters.Where(f => f.IsSelected).Select(f => f.Name).ToList();
+        if (selectedNames.Count == 0)
+            selectedNames = [AllLabel];
 
-        if (selectedNames.Count == 0 || selectedNames.Contains("All"))
-        {
-            LogContent = _rawLogContent;
-            return;
-        }
+        var hasAll = selectedNames.Contains(AllLabel);
 
-        var filterTokens = selectedNames
-            .Select(GetTokenForLevel)
-            .Where(t => !string.IsNullOrEmpty(t))
-            .Distinct()
-            .ToArray();
-
-        if (filterTokens.Length == 0)
+        if (hasAll)
         {
             LogContent = _rawLogContent;
             return;
         }
 
         var entries = ParseLogEntries();
-        var matchingEntries = entries.Where(entry =>
-            entry.Any(l => filterTokens.Any(token => l.Contains(token, StringComparison.OrdinalIgnoreCase)))
-        );
+        IEnumerable<List<string>> matchingEntries = entries;
+
+        if (!hasAll)
+        {
+            var filterTokens = selectedNames
+                .Select(GetTokenForLevel)
+                .Where(t => !string.IsNullOrEmpty(t))
+                .Distinct()
+                .ToArray();
+
+            if (filterTokens.Length > 0)
+                matchingEntries = matchingEntries.Where(entry =>
+                    entry.Any(l => filterTokens.Any(token => l.Contains(token, StringComparison.OrdinalIgnoreCase)))
+                );
+        }
 
         var result = string.Join(Environment.NewLine, matchingEntries.SelectMany(e => e));
+        if (result.Length > 0)
+        {
+            LogContent = result;
+            return;
+        }
+
         var filterLabel = string.Join(", ", selectedNames).ToLowerInvariant();
-        LogContent = result.Length > 0 ? result : $"No {filterLabel} entries found in selected log.";
+        LogContent = $"No {filterLabel} entries found in selected log.";
     }
 
     private void OpenLogsFolder()
@@ -427,22 +457,25 @@ public class SettingsViewModel : ObservableObject, IDisposable
 
     private void OnFilterItemChanged(object? sender, PropertyChangedEventArgs e)
     {
+        if (e.PropertyName != nameof(LogFilterItem.IsSelected))
+            return;
+
         if (_syncingFilters)
             return;
 
         _syncingFilters = true;
         try
         {
-            if (sender is LogFilterItem { Name: "All", IsSelected: true })
+            if (sender is LogFilterItem { Name: AllLabel } allItem)
             {
-                foreach (var f in LogFilters.Where(f => f.Name != "All"))
-                    f.IsSelected = true;
+                foreach (var f in LogFilters.Where(f => f.Name != AllLabel))
+                    f.IsSelected = allItem.IsSelected;
             }
-            else if (sender is LogFilterItem { Name: not "All", IsSelected: false })
+            else if (sender is LogFilterItem { Name: not AllLabel })
             {
-                var allItem = LogFilters.FirstOrDefault(f => f.Name == "All");
-                if (allItem != null)
-                    allItem.IsSelected = false;
+                var masterAllItem = LogFilters.FirstOrDefault(f => f.Name == AllLabel);
+                if (masterAllItem != null)
+                    masterAllItem.IsSelected = LogFilters.Where(f => f.Name != AllLabel).All(f => f.IsSelected);
             }
         }
         finally
