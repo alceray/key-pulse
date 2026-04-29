@@ -1,6 +1,5 @@
 ﻿using System.Diagnostics;
 using System.IO;
-using System.Reflection;
 using KeyPulse.Configuration;
 
 namespace KeyPulse.Services;
@@ -11,9 +10,7 @@ public class LogAccessService
 
     public LogAccessService()
     {
-        var appName = Assembly.GetExecutingAssembly().GetName().Name ?? AppConstants.App.DefaultName;
-        var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-        _logDirectory = Path.Combine(appData, appName, AppConstants.Paths.LogsDirectoryName);
+        _logDirectory = AppDataPaths.GetPath(AppConstants.Paths.LogsDirectoryName);
         Directory.CreateDirectory(_logDirectory);
     }
 

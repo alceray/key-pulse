@@ -1,5 +1,4 @@
 ﻿using System.IO;
-using System.Reflection;
 using System.Text.Json;
 using KeyPulse.Configuration;
 using KeyPulse.Models;
@@ -12,14 +11,11 @@ public class AppSettingsService
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
     private readonly object _syncRoot = new();
     private readonly string _settingsFilePath;
-    private readonly string _appName;
     public event Action<AppUserSettings>? SettingsChanged;
 
     public AppSettingsService()
     {
-        _appName = Assembly.GetExecutingAssembly().GetName().Name ?? AppConstants.App.DefaultName;
-        var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-        var settingsDirectory = Path.Combine(appData, _appName);
+        var settingsDirectory = AppDataPaths.GetAppDataDirectory();
         Directory.CreateDirectory(settingsDirectory);
         _settingsFilePath = Path.Combine(settingsDirectory, AppConstants.Paths.SettingsFileName);
     }

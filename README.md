@@ -74,7 +74,8 @@ WMI (`System.Management`), Windows Raw Input (`WM_INPUT`), and the WinForms tray
   - keyboard series = `Keystrokes`, mouse series = `MouseClicks + MouseMovementSeconds`,
   - X-axis labels switch by range: `MM-dd HH:mm` (< 7 days), `MM-dd` (>= 7 days), `yyyy-MM` (>= 1 year).
 - Database file path:
-  - `%AppData%\\KeyPulse\\keypulse-data.db`
+  - `Release`: `%AppData%\\KeyPulse\\keypulse-data.db`
+  - `Debug` / testing: `%AppData%\\KeyPulse\\Test\\keypulse-data.db`
 
 ## Data Model
 

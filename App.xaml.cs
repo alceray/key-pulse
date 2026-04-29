@@ -36,7 +36,7 @@ public partial class App : System.Windows.Application
     protected override async void OnStartup(StartupEventArgs e)
     {
         _appName = Assembly.GetExecutingAssembly().GetName().Name ?? AppConstants.App.DefaultName;
-        ConfigureLogging(_appName);
+        ConfigureLogging();
         Log.Information("{AppName} startup initiated", _appName);
 
         // Attempt clean shutdown on unhandled exceptions (crashes).
@@ -205,12 +205,11 @@ public partial class App : System.Windows.Application
         return $"{appName}{AppConstants.App.ActivationEventSuffix}";
     }
 
-    private static void ConfigureLogging(string appName)
+    private static void ConfigureLogging()
     {
         try
         {
-            var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-            var logDirectory = Path.Combine(appData, appName, AppConstants.Paths.LogsDirectoryName);
+            var logDirectory = AppDataPaths.GetPath(AppConstants.Paths.LogsDirectoryName);
             Directory.CreateDirectory(logDirectory);
 
             var loggerConfiguration = new LoggerConfiguration().Enrich.FromLogContext();

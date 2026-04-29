@@ -45,7 +45,7 @@ Injection
 4. **ApplicationDbContext** (`DbContext`)
     - Three tables: `Devices` (mutable snapshot), `DeviceEvents` (immutable lifecycle log), and `ActivitySnapshots` (
       minute-level input activity)
-    - Database stored at `%AppData%\KeyPulse\keypulse-data.db`
+    - Database stored at `%AppData%\KeyPulse\keypulse-data.db` in Release and `%AppData%\KeyPulse\Test\keypulse-data.db` in Debug/testing builds
     - Unique constraint on `DeviceEvents(DeviceId, EventTime, EventType)` prevents duplicate lifecycle events
     - Unique constraint on `ActivitySnapshots(DeviceId, Minute)` prevents duplicate minute buckets
     - See: `Data/ApplicationDbContext.cs`

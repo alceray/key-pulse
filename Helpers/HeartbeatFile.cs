@@ -1,5 +1,4 @@
 ﻿using System.IO;
-using System.Reflection;
 using KeyPulse.Configuration;
 using Serilog;
 
@@ -13,12 +12,7 @@ public static class HeartbeatFile
 {
     private static string FilePath
     {
-        get
-        {
-            var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-            var appName = Assembly.GetExecutingAssembly().GetName().Name ?? AppConstants.App.DefaultName;
-            return Path.Combine(appData, appName, AppConstants.Paths.HeartbeatFileName);
-        }
+        get => AppDataPaths.GetPath(AppConstants.Paths.HeartbeatFileName);
     }
 
     /// <summary>

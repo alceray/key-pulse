@@ -11,6 +11,7 @@ public static class AppConstants
 
     public static class Paths
     {
+        public const string TestDataDirectoryName = "Test";
         public const string LogsDirectoryName = "Logs";
         public const string SettingsFileName = "settings.json";
         public const string DatabaseFileName = "keypulse-data.db";
