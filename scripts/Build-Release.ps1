@@ -28,10 +28,10 @@ Write-Host "FileVersion: $fileVersion"
 
 # Restore & Publish
 Write-Host "`n--- Restore & Publish ---" -ForegroundColor Cyan
-dotnet restore
+dotnet restore "KeyPulse Signal.sln"
 if ($LASTEXITCODE -ne 0) { throw "dotnet restore failed." }
 
-dotnet publish -c Release -r win-x64 --no-self-contained -o publish\ /p:Version=$Version /p:FileVersion=$fileVersion
+dotnet publish "KeyPulse Signal.sln" -c Release -r win-x64 --no-self-contained -o publish\ /p:Version=$Version /p:FileVersion=$fileVersion
 if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed." }
 
 # Build installer

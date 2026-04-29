@@ -21,10 +21,18 @@ if ($status) {
     throw "Working tree is not clean. Commit or stash changes before releasing.`n$status"
 }
 
-# Confirm tag does not already exist
+# Delete existing tag if it exists (local and remote)
 $existing = git tag --list $tag
 if ($existing) {
-    throw "Tag '$tag' already exists. Delete it first if you want to re-release: git tag -d $tag"
+    Write-Host "Tag '$tag' already exists locally. Deleting..." -ForegroundColor Yellow
+    git tag -d $tag
+    if ($LASTEXITCODE -ne 0) { throw "Failed to delete local tag." }
+    
+    Write-Host "Attempting to delete remote tag..." -ForegroundColor Yellow
+    git push origin ":$tag" -f
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "Note: Remote tag may not have existed or could not be deleted." -ForegroundColor Yellow
+    }
 }
 
 Write-Host "Tagging release: $tag" -ForegroundColor Cyan
