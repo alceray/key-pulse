@@ -1,8 +1,8 @@
 ﻿param(
     [string[]]$ArtifactPaths = @(
-        "publish\KeyPulse.exe",
-        "installer\output\KeyPulse-Setup-1.0.0.exe"
+        "publish\KeyPulse.exe"
     ),
+    [string]$InstallerArtifactPattern = "installer\output\KeyPulse-Setup-*.exe",
     [string]$TimestampUrl = "http://timestamp.digicert.com"
 )
 
@@ -16,6 +16,23 @@ function Get-SignToolPath {
     }
 
     return $command.Source
+}
+
+function Resolve-InstallerArtifact {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Pattern
+    )
+
+    $match = Get-ChildItem -Path $Pattern -File -ErrorAction SilentlyContinue |
+        Sort-Object LastWriteTime -Descending |
+        Select-Object -First 1
+
+    if ($null -eq $match) {
+        return $null
+    }
+
+    return $match.FullName
 }
 
 function Sign-Artifact {
@@ -46,8 +63,15 @@ function Sign-Artifact {
     Write-Host "Signed artifact: $PathToSign"
 }
 
-$signToolPath = Get-SignToolPath
-foreach ($artifact in $ArtifactPaths) {
-    Sign-Artifact -SignTool $signToolPath -PathToSign $artifact -Timestamp $TimestampUrl
+$installerArtifact = Resolve-InstallerArtifact -Pattern $InstallerArtifactPattern
+if ($installerArtifact) {
+    $ArtifactPaths += $installerArtifact
+}
+else {
+    Write-Warning "No installer artifact found matching pattern: $InstallerArtifactPattern"
 }
 
+$signToolPath = Get-SignToolPath
+foreach ($artifact in ($ArtifactPaths | Select-Object -Unique)) {
+    Sign-Artifact -SignTool $signToolPath -PathToSign $artifact -Timestamp $TimestampUrl
+}

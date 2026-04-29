@@ -39,6 +39,19 @@ WMI (`System.Management`), Windows Raw Input (`WM_INPUT`), and the WinForms tray
 - Windows Raw Input (`WM_INPUT`)
 - Dependency Injection (`Microsoft.Extensions.DependencyInjection`)
 
+## Documentation
+
+- `AGENTS.md`
+  - architecture guide and implementation conventions for the codebase
+- `docs/PRODUCTION_READINESS_PLAN.md`
+  - tracked production hardening and release-readiness plan
+- `docs/RELEASE_PROCESS.md`
+  - versioning, packaging, and release workflow
+- `docs/RELEASE_CHECKLIST.md`
+  - step-by-step release validation checklist
+- `CHANGELOG.md`
+  - notable release-to-release changes
+
 ## Runtime Behavior Worth Knowing
 
 - Single-instance app: launching a second instance signals the existing instance to restore/focus its main window.
@@ -132,27 +145,15 @@ Common build/run commands:
 
 ## Release
 
-For release packaging (for example with Inno Setup), publish app output first:
+Release/versioning details live in:
 
-- `dotnet publish -c Release -r win-x64 --no-self-contained -o publish\`
-  - Produces release binaries under `publish\` for installer input.
-- `dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o publish\`
-  - Produces a self-contained publish output (larger, runtime included).
+- `docs/RELEASE_PROCESS.md`
+- `docs/RELEASE_CHECKLIST.md`
+- `CHANGELOG.md`
 
-If Inno Setup is installed, compile installer from script:
+GitHub releases are tag-driven. Push a `v*.*.*` tag and the workflow handles versioning, building, and publishing automatically. See `docs/RELEASE_PROCESS.md`.
 
-- `iscc "installer\KeyPulse.iss"`
-  - Builds installer output under `installer\output\`.
-- In Inno Setup Compiler app:
-  - Open `installer\KeyPulse.iss`
-  - Click **Build** (or press `F9`) to compile the installer.
-
-Upgrade flow (installed app already present):
-
-- Bump `#define AppVersion` in `installer\KeyPulse.iss`.
-- Re-run publish and installer build commands.
-- Run the new installer **without uninstalling first**; Inno Setup upgrades in place when `AppId` is unchanged.
-- Verify app history/settings remain under `%AppData%\KeyPulse\`.
+For installed users, updates are installer-driven: run the latest installer over the existing install.
 
 ## Architecture Notes
 
@@ -169,4 +170,3 @@ Upgrade flow (installed app already present):
   - runs migrations,
   - performs crash recovery,
   - rebuilds persisted usage snapshots on startup.
-

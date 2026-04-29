@@ -1,0 +1,40 @@
+﻿name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Extract version from tag
+        id: version
+        shell: pwsh
+        run: echo "VERSION=$($env:GITHUB_REF_NAME -replace '^v','')" >> $env:GITHUB_OUTPUT
+
+      - name: Restore & Publish
+        shell: pwsh
+        run: dotnet publish -c Release -r win-x64 --no-self-contained -o publish\ /p:Version=${{ steps.version.outputs.VERSION }} /p:FileVersion=${{ steps.version.outputs.VERSION }}.0
+
+      - name: Install Inno Setup
+        uses: Minionguyjpro/Inno-Setup-Action@v1.2.4
+        with:
+          path: installer\KeyPulse.iss
+          options: /DAppVersion=${{ steps.version.outputs.VERSION }}
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: installer/output/KeyPulse-Setup-*.exe
+          body_path: CHANGELOG.md
+

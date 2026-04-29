@@ -3,7 +3,9 @@
 ;   dotnet publish -c Release -r win-x64 --no-self-contained -o ..\publish\
 
 #define AppName "KeyPulse"
-#define AppVersion "1.0.0"
+#ifndef AppVersion
+  #define AppVersion "1.1.0"
+#endif
 #define AppPublisher "KeyPulse"
 #define AppExeName "KeyPulse.exe"
 

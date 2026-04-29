@@ -199,6 +199,7 @@ dotnet ef database update SomeOlderMigrationName
 | `ViewModels/` | MVVM viewmodels for each UI view (e.g., `DeviceListViewModel`)                                                   |
 | `Views/`      | XAML + code-behind for UI (e.g., `DeviceListView.xaml`)                                                          |
 | `Migrations/` | EF Core snapshot migrations (read-only; auto-generated)                                                          |
+| `docs/`       | release docs, production-readiness plan, and other project documentation                                         |
 
 ---
 
@@ -247,9 +248,16 @@ dotnet ef database update SomeOlderMigrationName
 
 ### Device Name Resolution
 
-- `PowershellScripts.GetDeviceName(deviceId)` queries registry (Windows device metadata)
+- `DeviceNameLookup.GetDeviceName(deviceId)` first attempts native SetupAPI/cfgmgr32 lookup
+- Falls back to `PowershellScripts.GetDeviceName(deviceId)` only if native lookup fails
 - Falls back to `"Unknown Device"` if lookup fails
 - User can rename devices; changes saved immediately to DB
+
+### Documentation Entry Points
+
+- `README.md` = project overview, quick-start, and release doc links
+- `docs/RELEASE_PROCESS.md` = versioning and packaging workflow
+- `docs/PRODUCTION_READINESS_PLAN.md` = tracked production readiness plan
 
 ---
 

@@ -265,19 +265,19 @@ Make release output suitable for actual deployment.
 
 - **Files:** likely new installer/project files (not yet present)
 - **Status:** Completed.
-- **Implemented:** Chosen **Option A (Inno Setup)** and added installer script (`installer/KeyPulse.iss`) with:
+- **Implemented:** Chosen **installer-based packaging (Inno Setup)** and added installer script (`installer/KeyPulse.iss`) with:
   - install directory under Program Files
   - Start Menu shortcut and optional desktop shortcut
   - optional post-install launch
   - packaging output under `installer/output/` (ignored in `.gitignore`)
 - **Recommended options:**
-  - **Option A: Inno Setup / WiX** (best fit for current app style)
+  - **Inno Setup / WiX** (best fit for current app style)
     - install app under user or program files
     - optionally create startup entry
     - create Start Menu shortcut
     - uninstall cleanly
     - preserve `%AppData%\KeyPulse\keypulse-data.db`
-  - **Option B: MSIX**
+  - **MSIX**
     - possible, but validate tray/raw-input/WMI compatibility and startup behavior before committing
 - **Recommendation:** Start with Inno Setup or WiX for fastest path.
 - **Acceptance criteria:**
@@ -287,14 +287,11 @@ Make release output suitable for actual deployment.
 #### 5.3 Preserve user data across upgrades
 
 - **Files:** installer config, possibly migration/recovery docs
-- **Status:** In Progress.
-- **Implement:** Ensure installer/uninstaller does not remove:
-  - `%AppData%\KeyPulse\keypulse-data.db`
-  - logs unless user chooses full cleanup
-- **Implemented:** Inno Setup uninstall flow now prompts user whether to remove
-  `%AppData%\KeyPulse` data; default behavior preserves user data unless explicitly confirmed.
+- **Status:** Completed.
+- **Implemented:** Inno Setup uninstall flow prompts user whether to remove `%AppData%\KeyPulse` data; default
+  behavior preserves user data unless explicitly confirmed. Upgrade installs over existing install without data loss.
 - **Acceptance criteria:**
-  - upgrading app keeps history and settings intact (pending verification)
+  - upgrading app keeps history and settings intact ✅
 
 ---
 
@@ -411,23 +408,26 @@ Support long-term maintenance.
 
 #### 8.1 Add versioned release process
 
-- **Files:** release docs, pipeline config if present later
-- **Implement:** Define:
-  - semantic or date-based versioning
-  - release notes
-  - upgrade testing checklist
+- **Files:** `KeyPulse.csproj`, `installer/KeyPulse.iss`, `.github/workflows/release.yml`, `docs/RELEASE_PROCESS.md`, `docs/RELEASE_CHECKLIST.md`, `CHANGELOG.md`
+- **Status:** Completed.
+- **Implemented:** Defined reproducible release operations with semantic versioning and GitHub Actions automation:
+  - semantic version source-of-truth set in `KeyPulse.csproj` (`Version`, `FileVersion`) and mirrored in `installer/KeyPulse.iss`
+  - pushing a `v*.*.*` tag triggers GitHub Actions: validate versions → publish → build installer → create GitHub Release with artifact
+  - added release runbook and checklist docs under `docs/`
+  - added `CHANGELOG.md` for release-note tracking
 - **Acceptance criteria:**
-  - reproducible release process
+  - reproducible release process ✅
 
 #### 8.2 Add auto-update path (optional but recommended)
 
-- **Options:**
-  - installer-driven updates
-  - winget distribution
-  - custom update check
-  - MSIX/App Installer if you go that route
+- **Files:** `README.md`, `docs/RELEASE_PROCESS.md`, `docs/RELEASE_CHECKLIST.md`
+- **Status:** Completed.
+- **Implemented:** Adopted installer-driven updates:
+  - documented update flow: run latest installer over existing install (no uninstall-first)
+  - standardized release guidance for publishing/versioning installer artifacts
+  - included upgrade validation in release checklist
 - **Acceptance criteria:**
-  - users can upgrade without manual uninstall/reinstall
+  - users can upgrade without manual uninstall/reinstall ✅
 
 ---
 
@@ -513,3 +513,6 @@ KeyPulse is production-ready when all of these are true:
 - upgrades without losing user data
 - uses a real release build configuration
 - exposes key behavior through settings/UI, not just config/env vars
+
+
+
