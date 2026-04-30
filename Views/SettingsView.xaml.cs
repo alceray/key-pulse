@@ -9,7 +9,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace KeyPulse.Views;
 
-public partial class SettingsView : UserControl
+public partial class SettingsView
 {
     private SettingsViewModel? _viewModel;
     private readonly List<(int Start, int Length)> _matchRanges = [];

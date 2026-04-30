@@ -1,5 +1,4 @@
-﻿using System.Reflection;
-using KeyPulse.Configuration;
+﻿using KeyPulse.Configuration;
 using Microsoft.Win32;
 using Serilog;
 
@@ -7,19 +6,14 @@ namespace KeyPulse.Services;
 
 public class StartupRegistrationService
 {
-    private readonly string _appName;
-
-    public StartupRegistrationService()
-    {
-        _appName = Assembly.GetExecutingAssembly().GetName().Name ?? AppConstants.App.DefaultName;
-    }
+    private static readonly string AppName = AppConstants.App.DefaultName;
 
     public bool IsEnabled()
     {
         try
         {
             using var runKey = Registry.CurrentUser.OpenSubKey(AppConstants.Registry.RunKeyPath, false);
-            var value = runKey?.GetValue(_appName) as string;
+            var value = runKey?.GetValue(AppName) as string;
             return !string.IsNullOrWhiteSpace(value);
         }
         catch (Exception ex)
@@ -35,12 +29,12 @@ public class StartupRegistrationService
         {
             using var runKey = Registry.CurrentUser.CreateSubKey(AppConstants.Registry.RunKeyPath, true);
             var command = BuildCommand();
-            runKey.SetValue(_appName, command, RegistryValueKind.String);
-            Log.Information("Enabled startup registration for {AppName}; Command={Command}", _appName, command);
+            runKey.SetValue(AppName, command, RegistryValueKind.String);
+            Log.Information("Enabled startup registration for {AppName}; Command={Command}", AppName, command);
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Failed to enable startup registration for {AppName}", _appName);
+            Log.Error(ex, "Failed to enable startup registration for {AppName}", AppName);
             throw;
         }
     }
@@ -50,15 +44,15 @@ public class StartupRegistrationService
         try
         {
             using var runKey = Registry.CurrentUser.OpenSubKey(AppConstants.Registry.RunKeyPath, true);
-            if (runKey?.GetValue(_appName) == null)
+            if (runKey?.GetValue(AppName) == null)
                 return;
 
-            runKey.DeleteValue(_appName, false);
-            Log.Information("Disabled startup registration for {AppName}", _appName);
+            runKey.DeleteValue(AppName, false);
+            Log.Information("Disabled startup registration for {AppName}", AppName);
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Failed to disable startup registration for {AppName}", _appName);
+            Log.Error(ex, "Failed to disable startup registration for {AppName}", AppName);
             throw;
         }
     }

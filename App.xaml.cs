@@ -159,7 +159,7 @@ public partial class App : System.Windows.Application
 
     protected override void OnExit(ExitEventArgs e)
     {
-        Log.Information("{AppName} shutdown initiated", _appName ?? AppConstants.App.DefaultName);
+        Log.Information("{AppName} shutdown initiated", _appName);
         try
         {
             _activateEventRegistration?.Unregister(null);
@@ -171,7 +171,7 @@ public partial class App : System.Windows.Application
             _updateService?.Dispose();
             _usbMonitorService?.Dispose();
             ServiceProvider.Dispose();
-            Log.Information("{AppName} shutdown completed", _appName ?? AppConstants.App.DefaultName);
+            Log.Information("{AppName} shutdown completed", _appName);
         }
         catch (Exception ex)
         {

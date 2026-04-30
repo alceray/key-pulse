@@ -1,10 +1,9 @@
-﻿using System.Windows.Controls;
-using KeyPulse.ViewModels;
+﻿using KeyPulse.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace KeyPulse.Views;
 
-public partial class EventLogView : UserControl
+public partial class EventLogView
 {
     public EventLogView()
     {

@@ -57,7 +57,7 @@ public class RawInputService : IDisposable
         | RI_MOUSE_BUTTON_4_UP
         | RI_MOUSE_BUTTON_5_UP;
 
-    // RAWKEYBOARD.Flags: bit 0 set = key-up (break), bit 0 clear = key-down (make)
+    // RawKeyboard.Flags: bit 0 set = key-up (break), bit 0 clear = key-down (make)
     private const ushort RI_KEY_BREAK = 0x01;
 
     #endregion
@@ -65,7 +65,7 @@ public class RawInputService : IDisposable
     #region Win32 structs
 
     [StructLayout(LayoutKind.Sequential)]
-    private struct RAWINPUTDEVICE
+    private struct RawInputDevice
     {
         public ushort usUsagePage;
         public ushort usUsage;
@@ -74,7 +74,7 @@ public class RawInputService : IDisposable
     }
 
     [StructLayout(LayoutKind.Sequential)]
-    private struct RAWINPUTHEADER
+    private struct RawInputHeader
     {
         public uint dwType;
         public uint dwSize;
@@ -83,10 +83,10 @@ public class RawInputService : IDisposable
     }
 
     /// <summary>
-    /// RAWMOUSE — uses explicit layout to express the usButtonFlags/usButtonData union correctly.
+    /// Uses explicit layout to express the usButtonFlags/usButtonData union correctly.
     /// </summary>
     [StructLayout(LayoutKind.Explicit)]
-    private struct RAWMOUSE
+    private struct RawMouse
     {
         [FieldOffset(0)]
         public ushort usFlags;
@@ -116,7 +116,7 @@ public class RawInputService : IDisposable
     }
 
     [StructLayout(LayoutKind.Sequential)]
-    private struct RAWKEYBOARD
+    private struct RawKeyboard
     {
         public ushort MakeCode;
         public ushort Flags;
@@ -132,7 +132,7 @@ public class RawInputService : IDisposable
 
     [DllImport("user32.dll", SetLastError = true)]
     private static extern bool RegisterRawInputDevices(
-        [MarshalAs(UnmanagedType.LPArray)] RAWINPUTDEVICE[] pRawInputDevices,
+        [MarshalAs(UnmanagedType.LPArray)] RawInputDevice[] pRawInputDevices,
         uint uiNumDevices,
         uint cbSize
     );
@@ -247,7 +247,7 @@ public class RawInputService : IDisposable
 
     private static void RegisterDevices(IntPtr hwnd)
     {
-        var devices = new RAWINPUTDEVICE[]
+        var devices = new RawInputDevice[]
         {
             // Generic Desktop / Keyboard  (UsagePage 0x01, Usage 0x06)
             new()
@@ -267,7 +267,7 @@ public class RawInputService : IDisposable
             },
         };
 
-        if (!RegisterRawInputDevices(devices, (uint)devices.Length, (uint)Marshal.SizeOf<RAWINPUTDEVICE>()))
+        if (!RegisterRawInputDevices(devices, (uint)devices.Length, (uint)Marshal.SizeOf<RawInputDevice>()))
             Log.Error(
                 "RawInputService: RegisterRawInputDevices failed (error {Win32Error})",
                 Marshal.GetLastWin32Error()
@@ -295,7 +295,7 @@ public class RawInputService : IDisposable
 
     private void ProcessRawInput(IntPtr lParam)
     {
-        var headerSize = (uint)Marshal.SizeOf<RAWINPUTHEADER>();
+        var headerSize = (uint)Marshal.SizeOf<RawInputHeader>();
         uint size = 0;
 
         // First call: query required buffer size.
@@ -309,7 +309,7 @@ public class RawInputService : IDisposable
             if (GetRawInputData(lParam, RID_INPUT, buffer, ref size, headerSize) == uint.MaxValue)
                 return;
 
-            var header = Marshal.PtrToStructure<RAWINPUTHEADER>(buffer);
+            var header = Marshal.PtrToStructure<RawInputHeader>(buffer);
             var bodyPtr = IntPtr.Add(buffer, (int)headerSize);
 
             // Map raw device handle → our DeviceId string.
@@ -321,7 +321,7 @@ public class RawInputService : IDisposable
 
             if (header.dwType == RIM_TYPEKEYBOARD)
             {
-                var kb = Marshal.PtrToStructure<RAWKEYBOARD>(bodyPtr);
+                var kb = Marshal.PtrToStructure<RawKeyboard>(bodyPtr);
                 var isKeyDown = (kb.Flags & RI_KEY_BREAK) == 0;
                 bool nextActivityState;
 
@@ -345,7 +345,7 @@ public class RawInputService : IDisposable
             }
             else if (header.dwType == RIM_TYPEMOUSE)
             {
-                var mouse = Marshal.PtrToStructure<RAWMOUSE>(bodyPtr);
+                var mouse = Marshal.PtrToStructure<RawMouse>(bodyPtr);
                 bool? nextActivityState = null;
 
                 if (mouse.usButtonFlags == 0)
@@ -472,7 +472,7 @@ public class RawInputService : IDisposable
     }
 
     /// <summary>
-    /// Resolves a Raw Input device handle to a KeyPulse DeviceId string (USB\VID_xxxx&PID_xxxx).
+    /// Resolves a Raw Input device handle to a KeyPulse DeviceId string.
     /// Result is cached for the lifetime of the handle (i.e., while the device is connected).
     /// Called only on the UI thread (inside WndProc), so no lock is needed for the cache.
     /// </summary>
@@ -614,7 +614,7 @@ public class RawInputService : IDisposable
         // Flush any remaining data (including the current partial minute).
         try
         {
-            int flushedBucketCount = 0;
+            int flushedBucketCount;
             lock (_lock)
             {
                 flushedBucketCount = _buckets.Count;

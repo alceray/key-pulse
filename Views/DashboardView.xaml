@@ -112,6 +112,7 @@
 
       <oxy:PlotView
         Grid.Row="1"
+        Grid.Column="0"
         Grid.ColumnSpan="2"
         Margin="4"
         Model="{Binding InputActivityPlot}"

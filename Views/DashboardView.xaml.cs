@@ -1,10 +1,9 @@
-﻿using System.Windows.Controls;
-using KeyPulse.ViewModels;
+﻿using KeyPulse.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace KeyPulse.Views;
 
-public partial class DashboardView : UserControl
+public partial class DashboardView
 {
     private readonly DashboardViewModel _viewModel;
 

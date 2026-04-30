@@ -2,14 +2,8 @@
 
 namespace KeyPulse.Helpers;
 
-public sealed class RelayCommand(Action<object> execute, Predicate<object>? canExecute = null)
-    : ICommand
+public sealed class RelayCommand(Action<object?> execute, Predicate<object?>? canExecute = null) : ICommand
 {
-    private readonly Action<object> _execute =
-        execute ?? throw new ArgumentNullException(nameof(execute));
-
-    private readonly Predicate<object>? _canExecute = canExecute;
-
     public event EventHandler? CanExecuteChanged
     {
         add => CommandManager.RequerySuggested += value;
@@ -18,11 +12,12 @@ public sealed class RelayCommand(Action<object> execute, Predicate<object>? canE
 
     public bool CanExecute(object? parameter)
     {
-        return _canExecute?.Invoke(parameter!) ?? true;
+        return canExecute?.Invoke(parameter) ?? true;
     }
 
     public void Execute(object? parameter)
     {
-        _execute(parameter!);
+        ArgumentNullException.ThrowIfNull(execute);
+        execute(parameter);
     }
 }

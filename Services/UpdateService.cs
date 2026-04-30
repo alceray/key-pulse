@@ -38,6 +38,9 @@ public class UpdateService : IDisposable
 
     public void Start()
     {
+        if (_checkTimer != null)
+            return;
+
         Log.Information("Update service started");
         CheckForUpdatesAsync().ConfigureAwait(false);
 
@@ -74,7 +77,7 @@ public class UpdateService : IDisposable
             var updateAvailable = IsNewerVersion(CurrentVersion, latestVersion);
 
             Log.Information(
-                "Update check result: Current=v{Current}, Latest=v{Latest}, Available={Available}",
+                "Update check result: Current=v{Current}, Latest=v{Latest}, UpdateAvailable={Available}",
                 CurrentVersion,
                 latestVersion,
                 updateAvailable
@@ -84,13 +87,7 @@ public class UpdateService : IDisposable
             {
                 _updateAvailable = updateAvailable;
                 UpdateStatusChanged?.Invoke(
-                    new UpdateAvailableEventArgs
-                    {
-                        Available = updateAvailable,
-                        CurrentVersion = CurrentVersion,
-                        LatestVersion = latestVersion,
-                        DownloadUrl = release.HtmlUrl,
-                    }
+                    new UpdateAvailableEventArgs { Available = updateAvailable, LatestVersion = latestVersion }
                 );
             }
         }
@@ -127,7 +124,7 @@ public class UpdateService : IDisposable
             var currentParts = current.Split('.').Select(int.Parse).ToArray();
             var latestParts = latest.Split('.').Select(int.Parse).ToArray();
 
-            for (int i = 0; i < Math.Max(currentParts.Length, latestParts.Length); i++)
+            for (var i = 0; i < Math.Max(currentParts.Length, latestParts.Length); i++)
             {
                 var currPart = i < currentParts.Length ? currentParts[i] : 0;
                 var latestPart = i < latestParts.Length ? latestParts[i] : 0;
@@ -150,7 +147,7 @@ public class UpdateService : IDisposable
     public void Dispose()
     {
         _checkTimer?.Stop();
-        _httpClient?.Dispose();
+        _httpClient.Dispose();
         Log.Information("UpdateService disposed");
         GC.SuppressFinalize(this);
     }
@@ -158,20 +155,12 @@ public class UpdateService : IDisposable
     public class UpdateAvailableEventArgs
     {
         public bool Available { get; set; }
-        public string? CurrentVersion { get; set; }
         public string? LatestVersion { get; set; }
-        public string? DownloadUrl { get; set; }
     }
 
     private class GitHubRelease
     {
         [JsonPropertyName("tag_name")]
         public string? TagName { get; set; }
-
-        [JsonPropertyName("html_url")]
-        public string? HtmlUrl { get; set; }
-
-        [JsonPropertyName("prerelease")]
-        public bool Prerelease { get; set; }
     }
 }

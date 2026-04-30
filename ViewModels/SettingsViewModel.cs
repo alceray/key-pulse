@@ -41,7 +41,7 @@ public class SettingsViewModel : ObservableObject, IDisposable
     private bool _isCheckingUpdates;
     private bool _isUpdateAvailable;
     private string? _latestUpdateVersion;
-    private bool _isLogsVisible = false;
+    private bool _isLogsVisible;
     private bool _suppressAutoSave;
     private bool _syncingFilters;
     private string? _selectedLogFile;
@@ -66,7 +66,7 @@ public class SettingsViewModel : ObservableObject, IDisposable
         RefreshLogsCommand = new RelayCommand(_ => RefreshLogs());
         CopyLogsCommand = new RelayCommand(_ => CopyLogs(), _ => !string.IsNullOrEmpty(LogContent));
         OpenLogsFolderCommand = new RelayCommand(_ => OpenLogsFolder());
-        UpdateActionCommand = new RelayCommand(async _ => await RunUpdateActionAsync(), _ => !_isCheckingUpdates);
+        UpdateActionCommand = new AsyncRelayCommand(_ => RunUpdateActionAsync(), _ => !_isCheckingUpdates);
         _appSettingsService.SettingsChanged += OnSettingsChanged;
         _updateService.UpdateStatusChanged += OnUpdateStatusChanged;
 
@@ -294,9 +294,6 @@ public class SettingsViewModel : ObservableObject, IDisposable
 
     private void UpdateFilterCounts()
     {
-        if (LogFilters == null)
-            return;
-
         foreach (var filter in LogFilters)
             filter.Count =
                 filter.Name == AppConstants.Logging.AllLabel
@@ -337,7 +334,7 @@ public class SettingsViewModel : ObservableObject, IDisposable
         try
         {
             _isCheckingUpdates = true;
-            CommandManager.InvalidateRequerySuggested();
+            AsyncRelayCommand.RaiseCanExecuteChanged();
             await _updateService.CheckForUpdatesAsync();
             SyncUpdateStateFromService();
 
@@ -352,7 +349,7 @@ public class SettingsViewModel : ObservableObject, IDisposable
         finally
         {
             _isCheckingUpdates = false;
-            CommandManager.InvalidateRequerySuggested();
+            AsyncRelayCommand.RaiseCanExecuteChanged();
         }
     }
 

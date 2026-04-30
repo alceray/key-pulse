@@ -16,6 +16,8 @@ public class DeviceListViewModel : ObservableObject, IDisposable
     private readonly UsbMonitorService _usbMonitorService;
     private readonly RawInputService _rawInputService;
     private readonly DispatcherTimer _timer;
+    private bool _showAllDevices;
+    private string _currentSessionTime = "00:00:00";
 
     public ICollectionView DeviceListCollection { get; }
     public ICommand RenameDeviceCommand { get; }
@@ -35,12 +37,10 @@ public class DeviceListViewModel : ObservableObject, IDisposable
                     DeviceListCollection.Refresh();
                     OnPropertyChanged(nameof(DeviceTitleWithCount));
                 });
-                OnPropertyChanged(nameof(ShowAllDevices));
+                OnPropertyChanged();
             }
         }
     }
-
-    private bool _showAllDevices = false;
 
     /// <summary>
     /// Formatted current app session time (HH:mm:ss).
@@ -57,8 +57,6 @@ public class DeviceListViewModel : ObservableObject, IDisposable
             }
         }
     }
-
-    private string _currentSessionTime = "00:00:00";
 
     public DeviceListViewModel(UsbMonitorService usbMonitorService, RawInputService rawInputService)
     {

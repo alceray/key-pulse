@@ -1,6 +1,5 @@
 ﻿using System.Globalization;
 using System.Windows;
-using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Media;
 using KeyPulse.Helpers;
@@ -10,7 +9,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace KeyPulse.Views;
 
-public partial class DeviceListView : UserControl
+public partial class DeviceListView
 {
     public DeviceListView()
     {
