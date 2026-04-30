@@ -3,6 +3,7 @@ using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Threading;
 using KeyPulse.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -41,12 +42,23 @@ public partial class SettingsView : UserControl
             return;
 
         if (_viewModel != null)
+        {
             _viewModel.PropertyChanged -= ViewModelOnPropertyChanged;
+            _viewModel.LogsRefreshed -= OnLogsRefreshed;
+        }
 
         _viewModel = next;
 
         if (_viewModel != null)
+        {
             _viewModel.PropertyChanged += ViewModelOnPropertyChanged;
+            _viewModel.LogsRefreshed += OnLogsRefreshed;
+        }
+    }
+
+    private void OnLogsRefreshed()
+    {
+        Dispatcher.BeginInvoke(new Action(() => LogViewer.ScrollToEnd()), DispatcherPriority.Background);
     }
 
     private void ViewModelOnPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)

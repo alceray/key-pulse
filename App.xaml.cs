@@ -1,11 +1,8 @@
 ﻿using System.ComponentModel;
-using System.Drawing;
 using System.IO;
 using System.Windows;
-using System.Windows.Forms;
 using KeyPulse.Configuration;
 using KeyPulse.Data;
-using KeyPulse.Models;
 using KeyPulse.Services;
 using KeyPulse.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
@@ -20,14 +17,13 @@ public partial class App : System.Windows.Application
 {
     private UsbMonitorService? _usbMonitorService;
     private RawInputService? _rawInputService;
+    private UpdateService? _updateService;
+    private TrayIconService? _trayIconService;
     private static Mutex? _appMutex;
     private EventWaitHandle? _activateEvent;
     private RegisteredWaitHandle? _activateEventRegistration;
-    private NotifyIcon? _trayIcon;
-    private ToolStripMenuItem? _launchOnLoginMenuItem;
     private string? _appName;
     private AppSettingsService? _appSettingsService;
-    private LogAccessService? _logAccessService;
     private StartupRegistrationService? _startupRegistrationService;
     private static bool RunInBackground { get; set; }
     public static ServiceProvider ServiceProvider { get; private set; } = null!;
@@ -79,9 +75,9 @@ public partial class App : System.Windows.Application
         ServiceProvider = services.BuildServiceProvider();
 
         _appSettingsService = ServiceProvider.GetRequiredService<AppSettingsService>();
-        _logAccessService = ServiceProvider.GetRequiredService<LogAccessService>();
         _startupRegistrationService = ServiceProvider.GetRequiredService<StartupRegistrationService>();
-        _appSettingsService.SettingsChanged += OnAppSettingsChanged;
+        _updateService = ServiceProvider.GetRequiredService<UpdateService>();
+        _trayIconService = ServiceProvider.GetRequiredService<TrayIconService>();
 
         // Resolve startup mode with precedence: launch args > build default.
         RunInBackground = ResolveRunInBackground(e.Args);
@@ -92,16 +88,28 @@ public partial class App : System.Windows.Application
         _usbMonitorService = ServiceProvider.GetRequiredService<UsbMonitorService>();
 
         // Show window / tray immediately so the UI appears while slow startup runs in the background.
-        if (RunInBackground)
-        {
-            InitializeTrayIcon();
-        }
-        else
+        // First launch always shows the window, even in Release/tray mode.
+        var settings = _appSettingsService.GetSettings();
+
+        if (!RunInBackground || settings.IsFirstLaunch)
         {
             MainWindow = new MainWindow();
             MainWindow.Title = _appName;
             MainWindow.Closing += MainWindow_Closing;
             MainWindow.Show();
+
+            // Mark first launch as done and save.
+            if (settings.IsFirstLaunch)
+            {
+                settings.IsFirstLaunch = false;
+                _appSettingsService.SaveSettings(settings);
+            }
+        }
+
+        // Initialize tray if in background mode (either first launch or not).
+        if (RunInBackground)
+        {
+            _trayIconService?.Initialize(ShowMainWindow, Shutdown);
         }
 
         // WMI device snapshot + watcher setup - awaited off the UI thread.
@@ -133,6 +141,18 @@ public partial class App : System.Windows.Application
             );
         }
 
+        try
+        {
+            _updateService.Start();
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "UpdateService startup failed unexpectedly");
+            ShowStartupWarning(
+                "Update checks failed to start. The app will continue running, and you can still try checking manually from Settings."
+            );
+        }
+
         Log.Information("{AppName} startup completed", _appName);
         base.OnStartup(e);
     }
@@ -144,12 +164,11 @@ public partial class App : System.Windows.Application
         {
             _activateEventRegistration?.Unregister(null);
             _activateEvent?.Dispose();
-            if (_appSettingsService != null)
-                _appSettingsService.SettingsChanged -= OnAppSettingsChanged;
             _appMutex?.ReleaseMutex();
             _appMutex?.Dispose();
-            _trayIcon?.Dispose();
+            _trayIconService?.Dispose();
             _rawInputService?.Dispose();
+            _updateService?.Dispose();
             _usbMonitorService?.Dispose();
             ServiceProvider.Dispose();
             Log.Information("{AppName} shutdown completed", _appName ?? AppConstants.App.DefaultName);
@@ -174,6 +193,8 @@ public partial class App : System.Windows.Application
         services.AddSingleton<StartupRegistrationService>();
         services.AddSingleton<UsbMonitorService>();
         services.AddSingleton<RawInputService>();
+        services.AddSingleton<UpdateService>();
+        services.AddSingleton<TrayIconService>();
         services.AddTransient<DashboardViewModel>();
         services.AddTransient<DeviceListViewModel>();
         services.AddTransient<EventLogViewModel>();
@@ -274,37 +295,6 @@ public partial class App : System.Windows.Application
         }
     }
 
-    private void InitializeTrayIcon()
-    {
-        var settings = _appSettingsService?.GetSettings() ?? new AppUserSettings();
-
-        _trayIcon = new NotifyIcon
-        {
-            Icon = new Icon(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Assets", "keyboard_mouse_icon.ico")),
-            Visible = true,
-            Text = _appName,
-            ContextMenuStrip = new ContextMenuStrip(),
-        };
-        _trayIcon.ContextMenuStrip.Items.Add("Open", null, (_, _) => ShowMainWindow());
-
-        _launchOnLoginMenuItem = new ToolStripMenuItem("Launch on Login")
-        {
-            CheckOnClick = true,
-            Checked = settings.LaunchOnLogin,
-        };
-        _launchOnLoginMenuItem.Click += (_, _) => ToggleLaunchOnLogin();
-        _trayIcon.ContextMenuStrip.Items.Add(_launchOnLoginMenuItem);
-
-        _trayIcon.ContextMenuStrip.Items.Add("Exit", null, (_, _) => Shutdown());
-        _trayIcon.MouseClick += (_, args) =>
-        {
-            if (args.Button == MouseButtons.Left)
-                ShowMainWindow();
-        };
-
-        Log.Information("Tray icon initialized");
-    }
-
     private void SyncStartupRegistrationFromSettings()
     {
         if (_appSettingsService == null || _startupRegistrationService == null)
@@ -317,8 +307,6 @@ public partial class App : System.Windows.Application
                 _startupRegistrationService.Enable();
             else
                 _startupRegistrationService.Disable();
-
-            ApplySettingsToTrayMenu(settings);
         }
         catch (Exception ex)
         {
@@ -327,59 +315,15 @@ public partial class App : System.Windows.Application
         }
     }
 
-    private void ToggleLaunchOnLogin()
-    {
-        if (_appSettingsService == null || _startupRegistrationService == null || _launchOnLoginMenuItem == null)
-            return;
-
-        var enabled = _launchOnLoginMenuItem.Checked;
-
-        try
-        {
-            var settings = _appSettingsService.GetSettings();
-            settings.LaunchOnLogin = enabled;
-            _appSettingsService.SaveSettings(settings);
-
-            if (enabled)
-                _startupRegistrationService.Enable();
-            else
-                _startupRegistrationService.Disable();
-
-            ApplySettingsToTrayMenu(settings);
-
-            Log.Information("Launch on Login updated: Enabled={Enabled}", enabled);
-        }
-        catch (Exception ex)
-        {
-            _launchOnLoginMenuItem.Checked = !enabled;
-            Log.Error(ex, "Failed to update Launch on Login setting");
-            ShowStartupWarning("Could not update Launch on Login. Check logs for details.");
-        }
-    }
-
-    private void OnAppSettingsChanged(AppUserSettings settings)
-    {
-        ApplySettingsToTrayMenu(settings);
-    }
-
-    private void ApplySettingsToTrayMenu(AppUserSettings settings)
-    {
-        if (_launchOnLoginMenuItem == null)
-            return;
-
-        Dispatcher.BeginInvoke(() => _launchOnLoginMenuItem.Checked = settings.LaunchOnLogin);
-    }
-
     private void ShowStartupWarning(string message)
     {
         try
         {
-            if (RunInBackground && _trayIcon != null)
-                _trayIcon.ShowBalloonTip(
-                    AppConstants.Logging.StartupWarningBalloonTimeoutMs,
+            if (RunInBackground && _trayIconService != null)
+                _trayIconService.ShowWarning(
                     "Startup Warning",
                     message,
-                    ToolTipIcon.Warning
+                    AppConstants.Logging.StartupWarningBalloonTimeoutMs
                 );
             else if (!RunInBackground && MainWindow != null)
                 MainWindow.Dispatcher.BeginInvoke(() =>

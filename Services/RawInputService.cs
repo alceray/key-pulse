@@ -589,7 +589,6 @@ public class RawInputService : IDisposable
         }
 
         _dataService.SaveActivitySnapshots(snapshots);
-        Log.Debug("RawInputService flushed {SnapshotCount} activity snapshot buckets", snapshots.Count);
     }
 
     public void Dispose()

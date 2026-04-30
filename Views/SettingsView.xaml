@@ -17,13 +17,34 @@
     </Grid.RowDefinitions>
 
     <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,16,0">
-      <TextBlock Text="Settings" FontSize="18" FontWeight="Bold" Margin="0,0,0,12" />
-
       <CheckBox
-        Content="Launch on Login"
+        Content="Launch on login"
         IsChecked="{Binding LaunchOnLogin, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
         Margin="0,0,0,10"
       />
+
+      <CheckBox
+        Content="Install updates automatically"
+        IsChecked="{Binding AutoInstallUpdates, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+        Margin="0,0,0,10"
+      />
+
+      <Grid Margin="0,0,0,10">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="Auto" />
+          <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
+
+        <TextBlock Grid.Column="0" Text="{Binding CurrentVersionDisplay}" VerticalAlignment="Center" />
+
+        <Button
+          Grid.Column="1"
+          Margin="8,0,0,0"
+          Padding="10,4"
+          Command="{Binding UpdateActionCommand}"
+          Content="{Binding UpdateActionButtonText}"
+        />
+      </Grid>
 
       <CheckBox Content="{Binding LogsButtonText}" IsChecked="{Binding IsLogsVisible, Mode=TwoWay}" Margin="0,0,0,10" />
     </StackPanel>

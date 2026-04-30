@@ -33,6 +33,13 @@ public static class AppConstants
     {
         public const int RetainedFileCountLimit = 14;
         public const int StartupWarningBalloonTimeoutMs = 5000;
+        public const string AllLabel = "All";
+        public const string FatalToken = "[FTL]";
+        public const string ErrorToken = "[ERR]";
+        public const string WarningToken = "[WRN]";
+        public const string InformationToken = "[INF]";
+        public const string DebugToken = "[DBG]";
+        public const string TimestampPatternRegex = @"^\d{4}-\d{2}-\d{2}";
     }
 
     public static class Registry
@@ -45,5 +52,20 @@ public static class AppConstants
         public const int SignalAggregationSeconds = 1;
         public const int HeartbeatIntervalSeconds = 30;
         public const string UnknownDeviceName = "Unknown Device";
+    }
+
+    public static class Updates
+    {
+        private const string GITHUB_OWNER = "alceray";
+        private const string GITHUB_REPO = "keypulse-signal";
+        public const string GitHubApiUrl = $"https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/releases/latest";
+
+        public static string GetGitHubReleaseTagUrl(string version) =>
+            $"https://github.com/{GITHUB_OWNER}/{GITHUB_REPO}/releases/tag/v{version}";
+    }
+
+    public static class Tray
+    {
+        public const string TrayIconRelativePath = @"Assets\keyboard_mouse_icon.ico";
     }
 }
