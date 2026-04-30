@@ -13,7 +13,7 @@ namespace KeyPulse;
 /// <summary>
 /// Interaction logic for App.xaml
 /// </summary>
-public partial class App : System.Windows.Application
+public partial class App
 {
     private UsbMonitorService? _usbMonitorService;
     private RawInputService? _rawInputService;
@@ -57,7 +57,7 @@ public partial class App : System.Windows.Application
             if (!SignalExistingInstance(instanceId))
             {
                 Log.Warning("Failed to signal existing instance; showing already-running message");
-                System.Windows.MessageBox.Show(
+                MessageBox.Show(
                     "The application is already running.",
                     _appName,
                     MessageBoxButton.OK,
@@ -199,6 +199,7 @@ public partial class App : System.Windows.Application
         services.AddTransient<DeviceListViewModel>();
         services.AddTransient<EventLogViewModel>();
         services.AddTransient<SettingsViewModel>();
+        services.AddTransient<TroubleshootingViewModel>();
     }
 
     private static bool ResolveRunInBackground(IEnumerable<string> args)
@@ -328,7 +329,7 @@ public partial class App : System.Windows.Application
             else if (!RunInBackground && MainWindow != null)
                 MainWindow.Dispatcher.BeginInvoke(() =>
                 {
-                    System.Windows.MessageBox.Show(message, _appName, MessageBoxButton.OK, MessageBoxImage.Warning);
+                    MessageBox.Show(message, _appName, MessageBoxButton.OK, MessageBoxImage.Warning);
                 });
         }
         catch (Exception ex)
@@ -363,7 +364,7 @@ public partial class App : System.Windows.Application
         if (RunInBackground)
         {
             e.Cancel = true;
-            MainWindow.Hide();
+            MainWindow?.Hide();
         }
     }
 }

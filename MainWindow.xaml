@@ -23,6 +23,9 @@
       <TabItem Header="Settings">
         <views:SettingsView />
       </TabItem>
+      <TabItem Header="Troubleshooting">
+        <views:TroubleshootingView />
+      </TabItem>
     </TabControl>
   </Grid>
 </Window>
