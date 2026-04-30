@@ -255,7 +255,7 @@ public partial class App
                 .WriteTo.File(
                     Path.Combine(logDirectory, AppConstants.Paths.RollingLogFileTemplate),
                     rollingInterval: RollingInterval.Day,
-                    retainedFileCountLimit: AppConstants.Logging.RetainedFileCountLimit,
+                    retainedFileCountLimit: AppConstants.Troubleshooting.RetainedFileCountLimit,
                     shared: true
                 )
                 .CreateLogger();
@@ -324,7 +324,7 @@ public partial class App
                 _trayIconService.ShowWarning(
                     "Startup Warning",
                     message,
-                    AppConstants.Logging.StartupWarningBalloonTimeoutMs
+                    AppConstants.Troubleshooting.StartupWarningBalloonTimeoutMs
                 );
             else if (!RunInBackground && MainWindow != null)
                 MainWindow.Dispatcher.BeginInvoke(() =>

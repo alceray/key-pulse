@@ -5,6 +5,7 @@ using System.IO;
 using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Input;
+using System.Windows.Media;
 using System.Windows.Threading;
 using KeyPulse.Configuration;
 using KeyPulse.Helpers;
@@ -18,19 +19,11 @@ public class TroubleshootingViewModel : ObservableObject, IDisposable
     public event Action? LogsRefreshed;
 
     private static readonly Regex TimestampPattern = new(
-        AppConstants.Logging.TimestampPatternRegex,
+        AppConstants.Troubleshooting.TimestampPatternRegex,
         RegexOptions.Compiled
     );
 
-    private static readonly (string Name, bool DefaultSelected)[] FilterDefinitions =
-    [
-        (AppConstants.Logging.AllLabel, false),
-        ("Fatal", true),
-        ("Error", true),
-        ("Warning", false),
-        ("Information", false),
-        ("Debug", false),
-    ];
+    private static readonly IReadOnlyList<string> FilterDefinitions = AppConstants.Troubleshooting.FilterNames;
 
     private readonly LogAccessService _logAccessService;
     private readonly DispatcherTimer _statusTimer;
@@ -58,7 +51,12 @@ public class TroubleshootingViewModel : ObservableObject, IDisposable
 
         LogFiles = new ObservableCollection<LogFileOption>();
         LogFilters = new ObservableCollection<LogFilterItem>(
-            FilterDefinitions.Select(f => new LogFilterItem { Name = f.Name, IsSelected = f.DefaultSelected })
+            FilterDefinitions.Select(name => new LogFilterItem
+            {
+                Name = name,
+                IsSelected = false,
+                LevelBrush = AppStyles.GetLogLevelBrush(name),
+            })
         );
 
         foreach (var item in LogFilters)
@@ -194,11 +192,11 @@ public class TroubleshootingViewModel : ObservableObject, IDisposable
     {
         return levelName switch
         {
-            "Fatal" => AppConstants.Logging.FatalToken,
-            "Error" => AppConstants.Logging.ErrorToken,
-            "Warning" => AppConstants.Logging.WarningToken,
-            "Information" => AppConstants.Logging.InformationToken,
-            "Debug" => AppConstants.Logging.DebugToken,
+            "Fatal" => AppConstants.Troubleshooting.FatalToken,
+            "Error" => AppConstants.Troubleshooting.ErrorToken,
+            "Warning" => AppConstants.Troubleshooting.WarningToken,
+            "Information" => AppConstants.Troubleshooting.InformationToken,
+            "Debug" => AppConstants.Troubleshooting.DebugToken,
             _ => string.Empty,
         };
     }
@@ -207,7 +205,7 @@ public class TroubleshootingViewModel : ObservableObject, IDisposable
     {
         foreach (var filter in LogFilters)
             filter.Count =
-                filter.Name == AppConstants.Logging.AllLabel
+                filter.Name == AppConstants.Troubleshooting.AllLabel
                     ? CountTotalEntries()
                     : CountLogEntries(GetTokenForLevel(filter.Name));
     }
@@ -273,9 +271,9 @@ public class TroubleshootingViewModel : ObservableObject, IDisposable
 
         var selectedNames = LogFilters.Where(filter => filter.IsSelected).Select(filter => filter.Name).ToList();
         if (selectedNames.Count == 0)
-            selectedNames = [AppConstants.Logging.AllLabel];
+            selectedNames = [AppConstants.Troubleshooting.AllLabel];
 
-        var hasAll = selectedNames.Contains(AppConstants.Logging.AllLabel);
+        var hasAll = selectedNames.Contains(AppConstants.Troubleshooting.AllLabel);
         if (hasAll)
         {
             LogContent = _rawLogContent;
@@ -297,14 +295,7 @@ public class TroubleshootingViewModel : ObservableObject, IDisposable
             );
 
         var result = string.Join(Environment.NewLine, matchingEntries.SelectMany(entry => entry));
-        if (result.Length > 0)
-        {
-            LogContent = result;
-            return;
-        }
-
-        var filterLabel = string.Join(", ", selectedNames).ToLowerInvariant();
-        LogContent = $"No {filterLabel} entries found in selected log.";
+        LogContent = result; // empty string when nothing matches — show nothing
     }
 
     private void OpenLogsFolder()
@@ -342,17 +333,22 @@ public class TroubleshootingViewModel : ObservableObject, IDisposable
         _syncingFilters = true;
         try
         {
-            if (sender is LogFilterItem { Name: var name } allItem && name == AppConstants.Logging.AllLabel)
+            if (sender is LogFilterItem { Name: var name } allItem && name == AppConstants.Troubleshooting.AllLabel)
             {
-                foreach (var filter in LogFilters.Where(filter => filter.Name != AppConstants.Logging.AllLabel))
+                foreach (var filter in LogFilters.Where(filter => filter.Name != AppConstants.Troubleshooting.AllLabel))
                     filter.IsSelected = allItem.IsSelected;
             }
-            else if (sender is LogFilterItem { Name: var senderName } && senderName != AppConstants.Logging.AllLabel)
+            else if (
+                sender is LogFilterItem { Name: var senderName }
+                && senderName != AppConstants.Troubleshooting.AllLabel
+            )
             {
-                var masterAllItem = LogFilters.FirstOrDefault(filter => filter.Name == AppConstants.Logging.AllLabel);
+                var masterAllItem = LogFilters.FirstOrDefault(filter =>
+                    filter.Name == AppConstants.Troubleshooting.AllLabel
+                );
                 if (masterAllItem != null)
                     masterAllItem.IsSelected = LogFilters
-                        .Where(filter => filter.Name != AppConstants.Logging.AllLabel)
+                        .Where(filter => filter.Name != AppConstants.Troubleshooting.AllLabel)
                         .All(filter => filter.IsSelected);
             }
         }
@@ -372,24 +368,25 @@ public class TroubleshootingViewModel : ObservableObject, IDisposable
     private string BuildLogDisplayDate(string fileName)
     {
         var dateSegment = Path.GetFileNameWithoutExtension(fileName);
-        const string filePrefix = "keypulse-";
+        const string filePrefix = AppConstants.Troubleshooting.LogFilePrefix;
         if (dateSegment.StartsWith(filePrefix, StringComparison.OrdinalIgnoreCase))
             dateSegment = dateSegment[filePrefix.Length..];
 
         if (
             DateTime.TryParseExact(
                 dateSegment,
-                "yyyyMMdd",
+                AppConstants.Troubleshooting.LogFileDateFormat,
                 CultureInfo.InvariantCulture,
                 DateTimeStyles.None,
                 out var parsedDate
             )
         )
-            return parsedDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+            return parsedDate.ToString(AppConstants.Troubleshooting.LogDisplayDateFormat, CultureInfo.InvariantCulture);
 
         var filePath = Path.Combine(_logAccessService.LogDirectory, fileName);
         if (File.Exists(filePath))
-            return File.GetLastWriteTime(filePath).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+            return File.GetLastWriteTime(filePath)
+                .ToString(AppConstants.Troubleshooting.LogDisplayDateFormat, CultureInfo.InvariantCulture);
 
         return fileName;
     }
@@ -407,6 +404,7 @@ public class TroubleshootingViewModel : ObservableObject, IDisposable
         private int _count;
 
         public required string Name { get; init; }
+        public required Brush LevelBrush { get; init; }
 
         public bool IsSelected
         {

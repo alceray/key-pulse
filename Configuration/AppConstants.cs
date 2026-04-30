@@ -29,7 +29,7 @@ public static class AppConstants
         public const string RollingLogFileTemplate = "keypulse-.log";
     }
 
-    public static class Logging
+    public static class Troubleshooting
     {
         public const int RetainedFileCountLimit = 14;
         public const int StartupWarningBalloonTimeoutMs = 5000;
@@ -40,6 +40,25 @@ public static class AppConstants
         public const string InformationToken = "[INF]";
         public const string DebugToken = "[DBG]";
         public const string TimestampPatternRegex = @"^\d{4}-\d{2}-\d{2}";
+        public const double DatePickerWidth = 140;
+        public const double SearchPanelWidth = 360;
+        public const string LogFilePrefix = "keypulse-";
+        public const string LogFileDateFormat = "yyyyMMdd";
+        public const string LogDisplayDateFormat = "yyyy-MM-dd";
+        public const string SessionStartMarker = "startup initiated";
+        public const char DividerChar = '─';
+        public const double DividerCharWidth = 7.1;
+        public const int DividerMinChars = 48;
+
+        public static readonly IReadOnlyList<string> FilterNames =
+        [
+            AllLabel,
+            "Fatal",
+            "Error",
+            "Warning",
+            "Information",
+            "Debug",
+        ];
     }
 
     public static class Registry

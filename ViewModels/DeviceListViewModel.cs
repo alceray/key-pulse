@@ -53,7 +53,7 @@ public class DeviceListViewModel : ObservableObject, IDisposable
             if (_currentSessionTime != value)
             {
                 _currentSessionTime = value;
-                OnPropertyChanged(nameof(CurrentSessionTime));
+                OnPropertyChanged();
             }
         }
     }
@@ -75,7 +75,7 @@ public class DeviceListViewModel : ObservableObject, IDisposable
         RenameDeviceCommand = new RelayCommand(ExecuteRenameDevice, CanExecuteRenameDevice);
 
         _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
-        _timer.Tick += (s, e) =>
+        _timer.Tick += (_, _) =>
         {
             // Update app session time from the AppStarted event timestamp.
             var elapsed = DateTime.Now - _usbMonitorService.AppSessionStartedAt;
@@ -130,7 +130,7 @@ public class DeviceListViewModel : ObservableObject, IDisposable
         });
     }
 
-    private void ExecuteRenameDevice(object parameter)
+    private void ExecuteRenameDevice(object? parameter)
     {
         if (parameter is Device device)
         {
@@ -142,7 +142,7 @@ public class DeviceListViewModel : ObservableObject, IDisposable
         }
     }
 
-    private bool CanExecuteRenameDevice(object parameter)
+    private bool CanExecuteRenameDevice(object? parameter)
     {
         return parameter is Device;
     }
