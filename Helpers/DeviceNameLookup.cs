@@ -31,11 +31,7 @@ public static class DeviceNameLookup
             var setupApiName = TryGetDeviceNameFromSetupApi(normalizedDeviceId);
             if (!string.IsNullOrWhiteSpace(setupApiName))
             {
-                Log.Debug(
-                    "DeviceNameLookup resolved via SetupAPI: {DeviceName} for DeviceId={DeviceId}",
-                    setupApiName,
-                    deviceId
-                );
+                Log.Debug("Resolved device name via SetupAPI: {DeviceName} for {DeviceId}", setupApiName, deviceId);
                 return setupApiName;
             }
 
@@ -43,22 +39,19 @@ public static class DeviceNameLookup
             if (!string.IsNullOrWhiteSpace(powerShellName))
             {
                 Log.Debug(
-                    "DeviceNameLookup resolved via PowerShell fallback: {DeviceName} for DeviceId={DeviceId}",
+                    "Resolved device name via PowerShell fallback: {DeviceName} for {DeviceId}",
                     powerShellName,
                     deviceId
                 );
                 return powerShellName;
             }
 
-            Log.Debug(
-                "DeviceNameLookup returned no result from SetupAPI or PowerShell for DeviceId={DeviceId}",
-                deviceId
-            );
+            Log.Debug("Device name lookup returned no result for {DeviceId}", deviceId);
             return null;
         }
         catch (Exception ex)
         {
-            Log.Warning(ex, "DeviceNameLookup failed for DeviceId={DeviceId}", deviceId);
+            Log.Warning(ex, "Device name lookup failed for {DeviceId}", deviceId);
             return null;
         }
     }

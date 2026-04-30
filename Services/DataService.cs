@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using KeyPulse.Configuration;
 using KeyPulse.Data;
@@ -28,36 +29,35 @@ public class DataService
     private void InitializeDatabase()
     {
         var stopwatch = Stopwatch.StartNew();
+        Log.Information("Database setup started");
         using var ctx = _factory.CreateDbContext();
         try
         {
             var appliedMigrations = ctx.Database.GetAppliedMigrations().ToList();
             var pendingMigrations = ctx.Database.GetPendingMigrations().ToList();
             Log.Information(
-                "Database migration status: Applied={AppliedCount}, Pending={PendingCount}",
+                "Migration status: Applied={AppliedCount}, Pending={PendingCount}",
                 appliedMigrations.Count,
                 pendingMigrations.Count
             );
 
             if (pendingMigrations.Count > 0)
             {
-                Log.Information("Pending migrations: {PendingMigrations}", string.Join(", ", pendingMigrations));
                 var backupPath = BackupDatabaseBeforeMigration(ctx);
                 if (!string.IsNullOrWhiteSpace(backupPath))
-                    Log.Information("Created pre-migration backup at {BackupPath}", backupPath);
+                    Log.Debug("Created pre-migration backup at {BackupPath}", backupPath);
+                Log.Debug("Applying pending migrations: {PendingMigrations}", string.Join(", ", pendingMigrations));
             }
 
-            Log.Information("Applying database migrations");
             ctx.Database.Migrate();
-            Log.Information("Enabling SQLite WAL mode");
             ctx.Database.ExecuteSqlRaw("PRAGMA journal_mode=WAL;");
             stopwatch.Stop();
-            Log.Information("Database initialization completed in {ElapsedMs}ms", stopwatch.ElapsedMilliseconds);
+            Log.Information("Database setup completed in {ElapsedMs}ms", stopwatch.ElapsedMilliseconds);
         }
         catch (Exception ex)
         {
             stopwatch.Stop();
-            Log.Error(ex, "Database initialization failed after {ElapsedMs}ms", stopwatch.ElapsedMilliseconds);
+            Log.Error(ex, "Database setup failed after {ElapsedMs}ms", stopwatch.ElapsedMilliseconds);
             throw;
         }
     }
@@ -130,7 +130,7 @@ public class DataService
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "ERROR in SaveDevice for DeviceId={DeviceId}", device.DeviceId);
+            Log.Error(ex, "Failed to save device snapshot for {DeviceId}", device.DeviceId);
         }
     }
 
@@ -217,7 +217,7 @@ public class DataService
         {
             Log.Warning(
                 ex,
-                "Duplicate DeviceEvent skipped for DeviceId={DeviceId}, EventType={EventType}, EventTime={EventTime}",
+                "Duplicate lifecycle event skipped for DeviceId={DeviceId}, EventType={EventType}, EventTime={EventTime}",
                 deviceEvent.DeviceId,
                 deviceEvent.EventType,
                 deviceEvent.EventTime
@@ -225,7 +225,7 @@ public class DataService
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "ERROR in AddDeviceEvent for DeviceId={DeviceId}", deviceEvent.DeviceId);
+            Log.Error(ex, "Failed to save lifecycle event for {DeviceId}", deviceEvent.DeviceId);
         }
     }
 
@@ -260,7 +260,7 @@ public class DataService
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "ERROR in SaveActivitySnapshots");
+            Log.Error(ex, "Failed to save activity snapshots");
         }
     }
 
@@ -316,6 +316,7 @@ public class DataService
     public void RecoverFromCrash()
     {
         var stopwatch = Stopwatch.StartNew();
+        Log.Information("Recovery check started");
         using var ctx = _factory.CreateDbContext();
 
         var lastAppEvent = ctx
@@ -325,15 +326,10 @@ public class DataService
 
         if (lastAppEvent == null || lastAppEvent.EventType != EventTypes.AppStarted)
         {
-            Log.Information("RecoverFromCrash skipped; no orphaned app session detected");
             stopwatch.Stop();
+            Log.Information("Recovery check completed in {ElapsedMs}ms", stopwatch.ElapsedMilliseconds);
             return;
         }
-
-        Log.Warning(
-            "RecoverFromCrash detected unclean shutdown; last AppStarted at {OrphanedSessionStart}",
-            lastAppEvent.EventTime
-        );
 
         // Use the last heartbeat as the crash time if it's more recent than the session start.
         // Falls back to the session start timestamp if no heartbeat is available.
@@ -343,6 +339,12 @@ public class DataService
             heartbeatTime.HasValue && heartbeatTime.Value > orphanedSessionStart
                 ? heartbeatTime.Value
                 : orphanedSessionStart;
+
+        Log.Warning(
+            "Recovery detected an unclean shutdown; last session began at {OrphanedSessionStart} and crashed around {HeartbeatTime}",
+            orphanedSessionStart.ToString(AppConstants.Date.DateFormat, CultureInfo.InvariantCulture),
+            crashTime.ToString(AppConstants.Date.DateFormat, CultureInfo.InvariantCulture)
+        );
 
         // Backfill ConnectionEnded for devices that have more opening than closing events.
         var orphanedSessionDeviceEvents = ctx
@@ -374,15 +376,14 @@ public class DataService
         ctx.DeviceEvents.Add(new DeviceEvent { EventType = EventTypes.AppEnded, EventTime = crashTime });
 
         ctx.SaveChanges();
-        stopwatch.Stop();
-
-        Log.Information(
-            "RecoverFromCrash backfilled AppEnded and {ConnectionEndedCount} ConnectionEnded events at {CrashTime}; devices affected: {AffectedDeviceIds}; duration: {ElapsedMs}ms",
+        Log.Debug(
+            "Backfilled {ConnectionEndedCount} connection close events for {AffectedDeviceIds}",
             unbalancedDeviceIds.Count,
-            crashTime,
-            string.Join(", ", unbalancedDeviceIds),
-            stopwatch.ElapsedMilliseconds
+            string.Join(", ", unbalancedDeviceIds)
         );
+
+        stopwatch.Stop();
+        Log.Information("Recovery completed in {ElapsedMs}ms", stopwatch.ElapsedMilliseconds);
     }
 
     /// <summary>
@@ -396,7 +397,7 @@ public class DataService
             var stopwatch = Stopwatch.StartNew();
             using var ctx = _factory.CreateDbContext();
             var devices = ctx.Devices.ToList();
-            Log.Information("Rebuilding device snapshots for {DeviceCount} devices", devices.Count);
+            Log.Information("Snapshot rebuild started for {DeviceCount} devices", devices.Count);
             foreach (var device in devices)
             {
                 device.TotalUsage = ComputeTotalUsage(ctx, device.DeviceId);
@@ -406,11 +407,11 @@ public class DataService
 
             ctx.SaveChanges();
             stopwatch.Stop();
-            Log.Information("RebuildDeviceSnapshots completed in {ElapsedMs}ms", stopwatch.ElapsedMilliseconds);
+            Log.Information("Snapshot rebuild completed in {ElapsedMs}ms", stopwatch.ElapsedMilliseconds);
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "ERROR in RebuildDeviceSnapshots");
+            Log.Error(ex, "Snapshot rebuild failed");
         }
     }
 }

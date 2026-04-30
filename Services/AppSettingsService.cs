@@ -34,7 +34,7 @@ public class AppSettingsService
             }
             catch (Exception ex)
             {
-                Log.Warning(ex, "Failed to read app settings; using defaults");
+                Log.Warning(ex, "Failed to read settings; using defaults");
                 return new AppUserSettings();
             }
         }
@@ -54,7 +54,7 @@ public class AppSettingsService
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Failed to save app settings");
+                Log.Error(ex, "Failed to save settings");
                 throw;
             }
         }

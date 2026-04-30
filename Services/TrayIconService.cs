@@ -10,6 +10,7 @@ public sealed class TrayIconService(UpdateService updateService) : IDisposable
 {
     private NotifyIcon? _trayIcon;
     private ToolStripMenuItem? _updateMenuItem;
+    private bool _disposed;
 
     public void Initialize(Action showMainWindow, Action shutdown)
     {
@@ -86,8 +87,16 @@ public sealed class TrayIconService(UpdateService updateService) : IDisposable
 
     public void Dispose()
     {
+        if (_disposed)
+        {
+            Log.Debug("Tray icon dispose skipped because it was already disposed");
+            return;
+        }
+
+        _disposed = true;
         updateService.UpdateStatusChanged -= OnUpdateStatusChanged;
         _trayIcon?.Dispose();
         _trayIcon = null;
+        Log.Information("Tray icon disposed");
     }
 }

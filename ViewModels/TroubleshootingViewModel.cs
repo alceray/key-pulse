@@ -307,7 +307,7 @@ public class TroubleshootingViewModel : ObservableObject, IDisposable
         catch (Exception ex)
         {
             StatusMessage = "Failed to open logs folder. Check logs for details.";
-            Log.Error(ex, "Failed to open logs folder from TroubleshootingView");
+            Log.Error(ex, "Failed to open logs folder");
         }
     }
 
@@ -368,25 +368,25 @@ public class TroubleshootingViewModel : ObservableObject, IDisposable
     private string BuildLogDisplayDate(string fileName)
     {
         var dateSegment = Path.GetFileNameWithoutExtension(fileName);
-        const string filePrefix = AppConstants.Troubleshooting.LogFilePrefix;
+        var filePrefix = AppConstants.Paths.RollingLogFileTemplate.Replace(".log", "");
         if (dateSegment.StartsWith(filePrefix, StringComparison.OrdinalIgnoreCase))
             dateSegment = dateSegment[filePrefix.Length..];
 
         if (
             DateTime.TryParseExact(
                 dateSegment,
-                AppConstants.Troubleshooting.LogFileDateFormat,
+                AppConstants.Date.LogFileDateFormat,
                 CultureInfo.InvariantCulture,
                 DateTimeStyles.None,
                 out var parsedDate
             )
         )
-            return parsedDate.ToString(AppConstants.Troubleshooting.LogDisplayDateFormat, CultureInfo.InvariantCulture);
+            return parsedDate.ToString(AppConstants.Date.LogDisplayDateFormat, CultureInfo.InvariantCulture);
 
         var filePath = Path.Combine(_logAccessService.LogDirectory, fileName);
         if (File.Exists(filePath))
             return File.GetLastWriteTime(filePath)
-                .ToString(AppConstants.Troubleshooting.LogDisplayDateFormat, CultureInfo.InvariantCulture);
+                .ToString(AppConstants.Date.LogDisplayDateFormat, CultureInfo.InvariantCulture);
 
         return fileName;
     }

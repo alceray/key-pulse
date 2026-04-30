@@ -200,7 +200,6 @@ public class RawInputService : IDisposable
     /// </summary>
     public void Start()
     {
-        Log.Information("RawInputService startup begin");
         try
         {
             Application.Current.Dispatcher.Invoke(() =>
@@ -220,16 +219,13 @@ public class RawInputService : IDisposable
                     _hwndSource.AddHook(WndProc);
 
                     RegisterDevices(_hwndSource.Handle);
-                    Log.Debug(
-                        "RawInputService message window created: Handle=0x{WindowHandle:X}",
-                        _hwndSource.Handle.ToInt64()
-                    );
+                    Log.Information("Input tracking ready");
                 }
                 catch (Exception ex)
                 {
                     Log.Error(
                         ex,
-                        "RawInputService failed to create message window or register devices; running in degraded mode (no per-device activity tracking)"
+                        "Failed to create input message window or register input devices; running in degraded mode"
                     );
                     _hwndSource?.Dispose();
                     _hwndSource = null;
@@ -239,10 +235,8 @@ public class RawInputService : IDisposable
         }
         catch (Exception ex)
         {
-            Log.Warning(ex, "RawInputService startup failed; app will function without real-time activity tracking");
+            Log.Warning(ex, "Input tracking startup failed; running without real-time activity tracking");
         }
-
-        Log.Information("RawInputService startup completed");
     }
 
     private static void RegisterDevices(IntPtr hwnd)
@@ -268,12 +262,7 @@ public class RawInputService : IDisposable
         };
 
         if (!RegisterRawInputDevices(devices, (uint)devices.Length, (uint)Marshal.SizeOf<RawInputDevice>()))
-            Log.Error(
-                "RawInputService: RegisterRawInputDevices failed (error {Win32Error})",
-                Marshal.GetLastWin32Error()
-            );
-        else
-            Log.Information("RawInputService: Raw Input registered successfully.");
+            Log.Error("Input device registration failed (error {Win32Error})", Marshal.GetLastWin32Error());
     }
 
     private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
@@ -287,7 +276,7 @@ public class RawInputService : IDisposable
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "RawInputService WndProc error");
+            Log.Error(ex, "Input message processing failed");
         }
 
         return IntPtr.Zero;
@@ -498,12 +487,6 @@ public class RawInputService : IDisposable
             var devicePath = Marshal.PtrToStringUni(namePtr) ?? "";
             var deviceId = ParseDeviceId(devicePath);
             _deviceHandleCache[hDevice] = deviceId;
-            Log.Debug(
-                "RawInputService: mapped hDevice 0x{DeviceHandle:X} to {DeviceId} (path: {DevicePath})",
-                hDevice.ToInt64(),
-                deviceId,
-                devicePath
-            );
             return deviceId;
         }
         finally
@@ -594,10 +577,13 @@ public class RawInputService : IDisposable
     public void Dispose()
     {
         if (_disposed)
+        {
+            Log.Debug("Input tracking dispose skipped because it was already disposed");
             return;
+        }
         _disposed = true;
 
-        Log.Information("RawInputService dispose begin");
+        Log.Information("Input tracking shutdown started");
 
         var disposeStopwatch = Stopwatch.StartNew();
 
@@ -608,7 +594,7 @@ public class RawInputService : IDisposable
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error disposing flush timer");
+            Log.Error(ex, "Failed to dispose flush timer");
         }
 
         // Flush any remaining data (including the current partial minute).
@@ -625,7 +611,7 @@ public class RawInputService : IDisposable
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "RawInputService flush on dispose failed");
+            Log.Error(ex, "Flushing pending activity data failed during shutdown");
         }
 
         try
@@ -643,11 +629,11 @@ public class RawInputService : IDisposable
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error disposing message window");
+            Log.Error(ex, "Failed to dispose input message window");
         }
 
         disposeStopwatch.Stop();
-        Log.Information("RawInputService dispose completed in {ElapsedMs}ms", disposeStopwatch.ElapsedMilliseconds);
+        Log.Information("Input tracking shutdown completed in {ElapsedMs}ms", disposeStopwatch.ElapsedMilliseconds);
 
         GC.SuppressFinalize(this);
     }

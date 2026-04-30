@@ -26,7 +26,7 @@ public static class HeartbeatFile
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "HeartbeatFile.Write failed");
+            Log.Error(ex, "Failed to write heartbeat file");
         }
     }
 
@@ -39,7 +39,7 @@ public static class HeartbeatFile
         {
             if (!File.Exists(FilePath))
             {
-                Log.Debug("HeartbeatFile.Read skipped; heartbeat file does not exist at {HeartbeatPath}", FilePath);
+                Log.Debug("Heartbeat read skipped; file does not exist at {HeartbeatPath}", FilePath);
                 return null;
             }
 
@@ -50,7 +50,7 @@ public static class HeartbeatFile
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "HeartbeatFile.Read failed");
+            Log.Error(ex, "Failed to read heartbeat file");
             return null;
         }
     }
@@ -67,7 +67,7 @@ public static class HeartbeatFile
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "HeartbeatFile.Clear failed");
+            Log.Error(ex, "Failed to clear heartbeat file");
         }
     }
 }

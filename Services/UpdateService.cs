@@ -14,6 +14,7 @@ public class UpdateService : IDisposable
     private System.Windows.Threading.DispatcherTimer? _checkTimer;
     private string? _latestVersion;
     private bool _updateAvailable;
+    private bool _disposed;
 
     public event Action<UpdateAvailableEventArgs>? UpdateStatusChanged;
 
@@ -41,24 +42,26 @@ public class UpdateService : IDisposable
         if (_checkTimer != null)
             return;
 
-        Log.Information("Update service started");
+        var startStopwatch = Stopwatch.StartNew();
+        Log.Information("Update check started");
         CheckForUpdatesAsync().ConfigureAwait(false);
 
         _checkTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromHours(1) };
         _checkTimer.Tick += (_, _) => CheckForUpdatesAsync().ConfigureAwait(false);
         _checkTimer.Start();
+        startStopwatch.Stop();
+        Log.Information("Update check completed in {ElapsedMs}ms", startStopwatch.ElapsedMilliseconds);
     }
 
     public async Task CheckForUpdatesAsync()
     {
         try
         {
-            Log.Information("Checking for updates. Current version: v{CurrentVersion}", CurrentVersion);
             using var response = await _httpClient.GetAsync(AppConstants.Updates.GitHubApiUrl);
 
             if (!response.IsSuccessStatusCode)
             {
-                Log.Warning("Failed to check for updates: {StatusCode}", response.StatusCode);
+                Log.Warning("Update check request failed: {StatusCode}", response.StatusCode);
                 return;
             }
 
@@ -67,7 +70,7 @@ public class UpdateService : IDisposable
 
             if (release?.TagName == null)
             {
-                Log.Warning("No valid release found from GitHub API");
+                Log.Warning("Update check returned invalid release data");
                 return;
             }
 
@@ -76,7 +79,7 @@ public class UpdateService : IDisposable
 
             var updateAvailable = IsNewerVersion(CurrentVersion, latestVersion);
 
-            Log.Information(
+            Log.Debug(
                 "Update check result: Current=v{Current}, Latest=v{Latest}, UpdateAvailable={Available}",
                 CurrentVersion,
                 latestVersion,
@@ -93,7 +96,7 @@ public class UpdateService : IDisposable
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error checking for updates");
+            Log.Error(ex, "Update check failed");
         }
     }
 
@@ -139,17 +142,24 @@ public class UpdateService : IDisposable
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error comparing versions: {Current} vs {Latest}", current, latest);
+            Log.Error(ex, "Version comparison failed: {Current} vs {Latest}", current, latest);
             return false;
         }
     }
 
     public void Dispose()
     {
+        if (_disposed)
+        {
+            Log.Debug("Update check dispose skipped because it was already disposed");
+            return;
+        }
+
+        _disposed = true;
         _checkTimer?.Stop();
+        _checkTimer = null;
         _httpClient.Dispose();
-        Log.Information("UpdateService disposed");
-        GC.SuppressFinalize(this);
+        Log.Information("Update check stopped and disposed");
     }
 
     public class UpdateAvailableEventArgs

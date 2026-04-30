@@ -137,7 +137,7 @@ public class SettingsViewModel : ObservableObject, IDisposable
         catch (Exception ex)
         {
             StatusMessage = "Update check failed. Check logs for details.";
-            Log.Error(ex, "Manual update check failed from SettingsView");
+            Log.Error(ex, "Manual update check failed");
         }
         finally
         {
@@ -211,8 +211,8 @@ public class SettingsViewModel : ObservableObject, IDisposable
                 _startupRegistrationService.Disable();
 
             StatusMessage = "Settings saved.";
-            Log.Information(
-                "Settings updated from SettingsView: LaunchOnLogin={LaunchOnLogin}, AutoInstallUpdates={AutoInstallUpdates}",
+            Log.Debug(
+                "Settings updated: LaunchOnLogin={LaunchOnLogin}, AutoInstallUpdates={AutoInstallUpdates}",
                 settings.LaunchOnLogin,
                 settings.AutoInstallUpdates
             );
@@ -220,7 +220,7 @@ public class SettingsViewModel : ObservableObject, IDisposable
         catch (Exception ex)
         {
             StatusMessage = "Failed to save settings. Check logs for details.";
-            Log.Error(ex, "Failed to save settings from SettingsView");
+            Log.Error(ex, "Failed to save settings");
         }
     }
 

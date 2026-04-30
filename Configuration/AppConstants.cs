@@ -26,7 +26,7 @@ public static class AppConstants
         public const string PreMigrationBackupSuffix = ".pre-migration";
         public const string HeartbeatFileName = "heartbeat.txt";
         public const string LogFilePattern = "*.log";
-        public const string RollingLogFileTemplate = "keypulse-.log";
+        public const string RollingLogFileTemplate = "keypulse-logs-.log";
     }
 
     public static class Troubleshooting
@@ -42,10 +42,7 @@ public static class AppConstants
         public const string TimestampPatternRegex = @"^\d{4}-\d{2}-\d{2}";
         public const double DatePickerWidth = 140;
         public const double SearchPanelWidth = 360;
-        public const string LogFilePrefix = "keypulse-";
-        public const string LogFileDateFormat = "yyyyMMdd";
-        public const string LogDisplayDateFormat = "yyyy-MM-dd";
-        public const string SessionStartMarker = "startup initiated";
+        public const string SessionStartMarker = "Application startup started";
         public const char DividerChar = '─';
         public const double DividerCharWidth = 7.1;
         public const int DividerMinChars = 48;
@@ -86,5 +83,12 @@ public static class AppConstants
     public static class Tray
     {
         public const string TrayIconRelativePath = @"Assets\keyboard_mouse_icon.ico";
+    }
+
+    public static class Date
+    {
+        public const string DateFormat = "yyyy-MM-dd HH:mm:ss";
+        public const string LogFileDateFormat = "yyyyMMdd";
+        public const string LogDisplayDateFormat = "yyyy-MM-dd";
     }
 }

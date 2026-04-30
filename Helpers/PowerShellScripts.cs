@@ -23,7 +23,7 @@ public static class PowershellScripts
             if (result?.BaseObject is string deviceName && !string.IsNullOrEmpty(deviceName))
                 return deviceName;
 
-        Log.Debug("PowerShell device-name lookup returned no result for DeviceId={DeviceId}", deviceId);
+        Log.Debug("PowerShell device name lookup returned no result for DeviceId={DeviceId}", deviceId);
         return null;
     }
 

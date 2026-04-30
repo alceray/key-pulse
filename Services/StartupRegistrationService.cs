@@ -30,11 +30,11 @@ public class StartupRegistrationService
             using var runKey = Registry.CurrentUser.CreateSubKey(AppConstants.Registry.RunKeyPath, true);
             var command = BuildCommand();
             runKey.SetValue(AppName, command, RegistryValueKind.String);
-            Log.Information("Enabled startup registration for {AppName}; Command={Command}", AppName, command);
+            Log.Information("Startup registration enabled");
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Failed to enable startup registration for {AppName}", AppName);
+            Log.Error(ex, "Failed to enable startup registration");
             throw;
         }
     }
@@ -48,11 +48,11 @@ public class StartupRegistrationService
                 return;
 
             runKey.DeleteValue(AppName, false);
-            Log.Information("Disabled startup registration for {AppName}", AppName);
+            Log.Information("Startup registration disabled");
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Failed to disable startup registration for {AppName}", AppName);
+            Log.Error(ex, "Failed to disable startup registration");
             throw;
         }
     }

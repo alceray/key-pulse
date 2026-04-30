@@ -3,6 +3,7 @@ using System.ComponentModel;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
+using KeyPulse.Configuration;
 using KeyPulse.Helpers;
 using KeyPulse.Models;
 using KeyPulse.Services;
@@ -302,7 +303,7 @@ public sealed class DashboardViewModel : ObservableObject, IDisposable
             SelectedSmoothingWindow
         );
 
-        LastUpdatedText = $"Last updated: {now:yyyy-MM-dd HH:mm:ss}";
+        LastUpdatedText = $"Last updated: {now.ToString(AppConstants.Date.DateFormat)}";
     }
 
     private static string BuildTopUsageSummary(IEnumerable<Device> devices, DeviceTypes type)

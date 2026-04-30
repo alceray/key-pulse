@@ -30,7 +30,7 @@ public class UsbMonitorService : IDisposable
         AppConstants.UsbMonitoring.SignalAggregationSeconds
     );
 
-    private bool _disposed = false;
+    private bool _disposed;
     private readonly DataService _dataService;
     private readonly Timer _heartbeatTimer;
 
@@ -65,35 +65,43 @@ public class UsbMonitorService : IDisposable
     /// </summary>
     public async Task StartAsync()
     {
-        Log.Information("UsbMonitorService startup begin");
-
         // SetCurrentDevicesFromSystem does WMI queries and registry-based device-name lookups
         // which can take 1-3 seconds — run on a thread pool thread to keep the UI responsive.
         // Internal Dispatcher.Invoke calls marshal UI work back to the UI thread safely.
+        var snapshotStopwatch = Stopwatch.StartNew();
+        Log.Information("Initial devices snapshot started");
         try
         {
             await Task.Run(SetCurrentDevicesFromSystem);
-            Log.Debug("SetCurrentDevicesFromSystem completed successfully");
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "UsbMonitorService SetCurrentDevicesFromSystem failed; continuing with known devices");
+            Log.Error(ex, "Initial snapshot failed; continuing with existing data");
         }
-
-        try
+        finally
         {
-            StartMonitoring();
-            Log.Debug("WMI monitoring started successfully");
-        }
-        catch (Exception ex)
-        {
-            Log.Error(
-                ex,
-                "UsbMonitorService WMI monitoring failed to start; app running in degraded mode (live device events disabled)"
+            snapshotStopwatch.Stop();
+            Log.Information(
+                "Initial devices snapshot completed in {ElapsedMs}ms",
+                snapshotStopwatch.ElapsedMilliseconds
             );
         }
 
-        Log.Information("UsbMonitorService startup completed");
+        var usbMonitoringStopwatch = Stopwatch.StartNew();
+        Log.Information("USB monitoring started");
+        try
+        {
+            StartMonitoring();
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "USB monitoring setup failed; running in degraded mode");
+        }
+        finally
+        {
+            usbMonitoringStopwatch.Stop();
+            Log.Information("USB monitoring completed in {ElapsedMs}ms", usbMonitoringStopwatch.ElapsedMilliseconds);
+        }
     }
 
     private ObservableCollection<Device> GetAllDevices()
@@ -197,7 +205,7 @@ public class UsbMonitorService : IDisposable
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "ERROR in DeviceInsertedEvent");
+            Log.Error(ex, "Insert event handling failed");
         }
     }
 
@@ -235,7 +243,7 @@ public class UsbMonitorService : IDisposable
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "ERROR in ProcessCachedDevice for DeviceId={DeviceId}", deviceId);
+            Log.Error(ex, "Cached signal processing failed for {DeviceId}", deviceId);
         }
     }
 
@@ -266,7 +274,7 @@ public class UsbMonitorService : IDisposable
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "ERROR in DeviceRemovedEvent");
+            Log.Error(ex, "Removal event handling failed");
         }
     }
 
@@ -316,102 +324,83 @@ public class UsbMonitorService : IDisposable
         if (_disposed)
             return;
 
-        try
-        {
-            WqlEventQuery insertQuery = new(
-                @"
+        WqlEventQuery insertQuery = new(
+            @"
                     SELECT * FROM __InstanceCreationEvent WITHIN 2 
                     WHERE TargetInstance ISA 'Win32_PnPEntity' 
                     AND (TargetInstance.Service = 'kbdhid' OR TargetInstance.Service = 'mouhid')
                 "
-            );
-            _insertWatcher = new ManagementEventWatcher(insertQuery);
-            _insertWatcher.EventArrived += DeviceInsertedEvent;
-            _insertWatcher.Start();
+        );
+        _insertWatcher = new ManagementEventWatcher(insertQuery);
+        _insertWatcher.EventArrived += DeviceInsertedEvent;
+        _insertWatcher.Start();
 
-            WqlEventQuery removeQuery = new(
-                @"
+        WqlEventQuery removeQuery = new(
+            @"
                     SELECT * FROM __InstanceDeletionEvent WITHIN 2 
                     WHERE TargetInstance ISA 'Win32_PnPEntity' 
                     AND (TargetInstance.Service = 'kbdhid' OR TargetInstance.Service = 'mouhid')
                 "
-            );
-            _removeWatcher = new ManagementEventWatcher(removeQuery);
-            _removeWatcher.EventArrived += DeviceRemovedEvent;
-            _removeWatcher.Start();
-            Log.Information("USB WMI watchers started successfully");
-        }
-        catch (Exception ex)
-        {
-            Log.Error(ex, "ERROR in StartMonitoring");
-        }
+        );
+        _removeWatcher = new ManagementEventWatcher(removeQuery);
+        _removeWatcher.EventArrived += DeviceRemovedEvent;
+        _removeWatcher.Start();
+        Log.Information("USB WMI watchers started");
     }
 
     private void SetCurrentDevicesFromSystem()
     {
-        try
-        {
-            AppSessionStartedAt = DateTime.Now;
-            AddDeviceEvent(new DeviceEvent { EventType = EventTypes.AppStarted, EventTime = AppSessionStartedAt });
+        AppSessionStartedAt = DateTime.Now;
+        AddDeviceEvent(new DeviceEvent { EventType = EventTypes.AppStarted, EventTime = AppSessionStartedAt });
 
-            var devicesById = new Dictionary<string, List<ManagementBaseObject>>();
-            ManagementObjectSearcher searcher = new(
-                @"
+        var devicesById = new Dictionary<string, List<ManagementBaseObject>>();
+        ManagementObjectSearcher searcher = new(
+            @"
                     SELECT * FROM Win32_PnPEntity 
                     WHERE Service = 'kbdhid' OR Service = 'mouhid'
                 "
-            );
+        );
 
-            foreach (var obj in searcher.Get())
-            {
-                var deviceId = ExtractDeviceId(obj);
-                if (string.IsNullOrEmpty(deviceId))
-                    continue;
-                if (!devicesById.ContainsKey(deviceId))
-                    devicesById[deviceId] = [];
-                devicesById[deviceId].Add(obj);
-            }
-
-            Log.Information("Detected {DeviceCount} connected HID devices at startup", devicesById.Count);
-
-            foreach (var (deviceId, objects) in devicesById)
-            {
-                var keyboardSignals = objects.Count(obj =>
-                    UsbDeviceClassifier.GetInterfaceSignal(obj) == DeviceTypes.Keyboard
-                );
-                var mouseSignals = objects.Count(obj =>
-                    UsbDeviceClassifier.GetInterfaceSignal(obj) == DeviceTypes.Mouse
-                );
-
-                var currDevice = DeviceList.FirstOrDefault(d => d.DeviceId == deviceId);
-                var deviceType = UsbDeviceClassifier.ResolveDeviceType(keyboardSignals, mouseSignals);
-                var deviceName =
-                    DeviceNameLookup.GetDeviceName(deviceId) ?? AppConstants.UsbMonitoring.UnknownDeviceName;
-
-                if (currDevice == null)
-                    currDevice = new Device
-                    {
-                        DeviceId = deviceId,
-                        DeviceType = deviceType,
-                        DeviceName = deviceName,
-                    };
-                else if (IsUnknownDeviceName(currDevice.DeviceName))
-                    currDevice.DeviceName = deviceName;
-
-                var connectionStartedEvent = new DeviceEvent
-                {
-                    DeviceId = currDevice.DeviceId,
-                    EventType = EventTypes.ConnectionStarted,
-                    EventTime = AppSessionStartedAt,
-                };
-                AddDeviceEvent(connectionStartedEvent, currDevice);
-            }
-
-            Log.Debug("SetCurrentDevicesFromSystem finished device snapshot sync");
-        }
-        catch (Exception ex)
+        foreach (var obj in searcher.Get())
         {
-            Log.Error(ex, "ERROR in SetCurrentDevicesFromSystem");
+            var deviceId = ExtractDeviceId(obj);
+            if (string.IsNullOrEmpty(deviceId))
+                continue;
+            if (!devicesById.ContainsKey(deviceId))
+                devicesById[deviceId] = [];
+            devicesById[deviceId].Add(obj);
+        }
+
+        Log.Information("Detected {DeviceCount} connected devices during startup", devicesById.Count);
+
+        foreach (var (deviceId, objects) in devicesById)
+        {
+            var keyboardSignals = objects.Count(obj =>
+                UsbDeviceClassifier.GetInterfaceSignal(obj) == DeviceTypes.Keyboard
+            );
+            var mouseSignals = objects.Count(obj => UsbDeviceClassifier.GetInterfaceSignal(obj) == DeviceTypes.Mouse);
+
+            var currDevice = DeviceList.FirstOrDefault(d => d.DeviceId == deviceId);
+            var deviceType = UsbDeviceClassifier.ResolveDeviceType(keyboardSignals, mouseSignals);
+            var deviceName = DeviceNameLookup.GetDeviceName(deviceId) ?? AppConstants.UsbMonitoring.UnknownDeviceName;
+
+            if (currDevice == null)
+                currDevice = new Device
+                {
+                    DeviceId = deviceId,
+                    DeviceType = deviceType,
+                    DeviceName = deviceName,
+                };
+            else if (IsUnknownDeviceName(currDevice.DeviceName))
+                currDevice.DeviceName = deviceName;
+
+            var connectionStartedEvent = new DeviceEvent
+            {
+                DeviceId = currDevice.DeviceId,
+                EventType = EventTypes.ConnectionStarted,
+                EventTime = AppSessionStartedAt,
+            };
+            AddDeviceEvent(connectionStartedEvent, currDevice);
         }
     }
 
@@ -427,109 +416,89 @@ public class UsbMonitorService : IDisposable
 
     public void Dispose()
     {
-        Dispose(true);
-        GC.SuppressFinalize(this);
-    }
-
-    private void Dispose(bool disposing)
-    {
         if (_disposed)
-            return;
-
-        if (disposing)
         {
-            Log.Information("UsbMonitorService dispose begin");
-            try
-            {
-                _heartbeatTimer.Dispose();
-                Log.Debug("Heartbeat timer disposed");
-            }
-            catch (Exception ex)
-            {
-                Log.Error(ex, "Error disposing heartbeat timer");
-            }
-
-            try
-            {
-                HeartbeatFile.Clear();
-                Log.Debug("Heartbeat file cleared");
-            }
-            catch (Exception ex)
-            {
-                Log.Error(ex, "Error clearing heartbeat file");
-            }
-
-            var sessionTimestamp = DateTime.Now;
-            var disconnectedDeviceCount = 0;
-
-            foreach (var device in DeviceList)
-            {
-                if (device.IsConnected)
-                {
-                    var connectionEndedEvent = new DeviceEvent
-                    {
-                        DeviceId = device.DeviceId,
-                        EventType = EventTypes.ConnectionEnded,
-                        EventTime = sessionTimestamp,
-                    };
-                    AddDeviceEvent(connectionEndedEvent, device);
-                    disconnectedDeviceCount++;
-                }
-
-                device.PropertyChanged -= Device_PropertyChanged;
-            }
-
-            if (disconnectedDeviceCount > 0)
-                Log.Information(
-                    "Closed {DisconnectedDeviceCount} open device connections during shutdown",
-                    disconnectedDeviceCount
-                );
-
-            AddDeviceEvent(new DeviceEvent { EventType = EventTypes.AppEnded, EventTime = sessionTimestamp });
-
-            var wmiStopwatch = Stopwatch.StartNew();
-            try
-            {
-                if (_insertWatcher != null)
-                {
-                    _insertWatcher.EventArrived -= DeviceInsertedEvent;
-                    _insertWatcher.Stop();
-                    _insertWatcher.Dispose();
-                    _insertWatcher = null;
-                    Log.Debug("Insert WMI watcher stopped and disposed");
-                }
-            }
-            catch (Exception ex)
-            {
-                Log.Error(ex, "Error stopping insert WMI watcher");
-            }
-
-            try
-            {
-                if (_removeWatcher != null)
-                {
-                    _removeWatcher.EventArrived -= DeviceRemovedEvent;
-                    _removeWatcher.Stop();
-                    _removeWatcher.Dispose();
-                    _removeWatcher = null;
-                    Log.Debug("Remove WMI watcher stopped and disposed");
-                }
-            }
-            catch (Exception ex)
-            {
-                Log.Error(ex, "Error stopping remove WMI watcher");
-            }
-
-            wmiStopwatch.Stop();
-
-            Log.Information("UsbMonitorService dispose completed in {ElapsedMs}ms", wmiStopwatch.ElapsedMilliseconds);
+            Log.Debug("USB monitoring dispose skipped because it was already disposed");
+            return;
         }
 
         _disposed = true;
-    }
 
-    ~UsbMonitorService()
-    {
-        Dispose(false);
+        Log.Information("USB monitoring shutdown started");
+        var shutdownStopwatch = Stopwatch.StartNew();
+
+        try
+        {
+            _heartbeatTimer.Dispose();
+            Log.Debug("Heartbeat timer disposed");
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Failed to dispose heartbeat timer");
+        }
+
+        try
+        {
+            HeartbeatFile.Clear();
+            Log.Debug("Heartbeat file cleared");
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Failed to clear heartbeat file");
+        }
+
+        var sessionTimestamp = DateTime.Now;
+        var disconnectedDeviceCount = 0;
+
+        foreach (var device in DeviceList)
+        {
+            if (device.IsConnected)
+            {
+                var connectionEndedEvent = new DeviceEvent
+                {
+                    DeviceId = device.DeviceId,
+                    EventType = EventTypes.ConnectionEnded,
+                    EventTime = sessionTimestamp,
+                };
+                AddDeviceEvent(connectionEndedEvent, device);
+                disconnectedDeviceCount++;
+            }
+
+            device.PropertyChanged -= Device_PropertyChanged;
+        }
+
+        if (disconnectedDeviceCount > 0)
+            Log.Information(
+                "Closed {DisconnectedDeviceCount} open connections during shutdown",
+                disconnectedDeviceCount
+            );
+
+        AddDeviceEvent(new DeviceEvent { EventType = EventTypes.AppEnded, EventTime = sessionTimestamp });
+
+        try
+        {
+            if (_insertWatcher != null)
+            {
+                _insertWatcher.EventArrived -= DeviceInsertedEvent;
+                _insertWatcher.Stop();
+                _insertWatcher.Dispose();
+                _insertWatcher = null;
+            }
+            if (_removeWatcher != null)
+            {
+                _removeWatcher.EventArrived -= DeviceRemovedEvent;
+                _removeWatcher.Stop();
+                _removeWatcher.Dispose();
+                _removeWatcher = null;
+            }
+            Log.Information("USB WMI watchers stopped and disposed");
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Failed to stop USB WMI watchers");
+        }
+
+        shutdownStopwatch.Stop();
+        Log.Information("USB monitoring shutdown completed in {ElapsedMs}ms", shutdownStopwatch.ElapsedMilliseconds);
     }
 }

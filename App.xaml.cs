@@ -30,10 +30,11 @@ public partial class App
 
     protected override async void OnStartup(StartupEventArgs e)
     {
+        var startupStopwatch = System.Diagnostics.Stopwatch.StartNew();
         _appName = AppConstants.App.DefaultName;
         var instanceId = GetInstanceId(_appName);
         ConfigureLogging();
-        Log.Information("{AppName} startup initiated", _appName);
+        Log.Information(AppConstants.Troubleshooting.SessionStartMarker);
 
         // Attempt clean shutdown on unhandled exceptions (crashes).
         // Force-kills (IDE stop, TerminateProcess) cannot be caught - RecoverFromCrash() handles those.
@@ -53,7 +54,7 @@ public partial class App
         _appMutex = new Mutex(true, instanceId, out var canCreateApp);
         if (!canCreateApp)
         {
-            Log.Information("Secondary instance detected for {InstanceId}; signaling active instance", instanceId);
+            Log.Information("Secondary instance detected; signaling active instance");
             if (!SignalExistingInstance(instanceId))
             {
                 Log.Warning("Failed to signal existing instance; showing already-running message");
@@ -65,6 +66,8 @@ public partial class App
                 );
             }
 
+            startupStopwatch.Stop();
+            Log.Information("Application startup completed in {ElapsedMs}ms", startupStopwatch.ElapsedMilliseconds);
             Environment.Exit(0);
         }
 
@@ -120,7 +123,7 @@ public partial class App
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "UsbMonitorService startup failed");
+            Log.Error(ex, "USB monitoring startup failed");
             ShowStartupWarning(
                 "Device monitoring failed to start completely. Some features may be unavailable. Check logs for details."
             );
@@ -135,7 +138,7 @@ public partial class App
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "RawInputService startup failed unexpectedly");
+            Log.Error(ex, "Input tracking startup failed");
             ShowStartupWarning(
                 "Activity tracking failed to start. The app will continue running but activity data may not be collected. Check logs for details."
             );
@@ -147,31 +150,28 @@ public partial class App
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "UpdateService startup failed unexpectedly");
+            Log.Error(ex, "Update check startup failed");
             ShowStartupWarning(
-                "Update checks failed to start. The app will continue running, and you can still try checking manually from Settings."
+                "Update check failed to start. The app will continue running, and you can still try checking manually from Settings."
             );
         }
 
-        Log.Information("{AppName} startup completed", _appName);
+        startupStopwatch.Stop();
+        Log.Information("Application startup completed in {ElapsedMs}ms", startupStopwatch.ElapsedMilliseconds);
         base.OnStartup(e);
     }
 
     protected override void OnExit(ExitEventArgs e)
     {
-        Log.Information("{AppName} shutdown initiated", _appName);
+        var shutdownStopwatch = System.Diagnostics.Stopwatch.StartNew();
+        Log.Information("Application shutdown started");
         try
         {
             _activateEventRegistration?.Unregister(null);
             _activateEvent?.Dispose();
             _appMutex?.ReleaseMutex();
             _appMutex?.Dispose();
-            _trayIconService?.Dispose();
-            _rawInputService?.Dispose();
-            _updateService?.Dispose();
-            _usbMonitorService?.Dispose();
             ServiceProvider.Dispose();
-            Log.Information("{AppName} shutdown completed", _appName);
         }
         catch (Exception ex)
         {
@@ -179,6 +179,8 @@ public partial class App
         }
         finally
         {
+            shutdownStopwatch.Stop();
+            Log.Information("Application shutdown completed in {ElapsedMs}ms", shutdownStopwatch.ElapsedMilliseconds);
             Log.CloseAndFlush();
             base.OnExit(e);
         }
@@ -276,10 +278,7 @@ public partial class App
             Timeout.Infinite,
             false
         );
-        Log.Debug(
-            "Activation signal listener initialized for {ActivationEventName}",
-            GetActivationEventName(instanceId)
-        );
+        Log.Debug("Activation signal listener initialized");
     }
 
     private static bool SignalExistingInstance(string instanceId)
@@ -291,7 +290,7 @@ public partial class App
         }
         catch
         {
-            Log.Warning("Activation signal event was not available for {InstanceId}", instanceId);
+            Log.Warning("Activation signal event was not available for the current instance");
             return false;
         }
     }
