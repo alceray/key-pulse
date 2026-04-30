@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using System.Globalization;
+using System.IO;
 using KeyPulse.Configuration;
 using Serilog;
 
@@ -44,9 +45,14 @@ public static class HeartbeatFile
             }
 
             var text = File.ReadAllText(FilePath).Trim();
-            return DateTime.TryParse(text, null, System.Globalization.DateTimeStyles.RoundtripKind, out var dt)
-                ? dt
-                : null;
+            if (DateTime.TryParse(text, null, DateTimeStyles.RoundtripKind, out var dt))
+                return dt;
+
+            Log.Warning(
+                "Heartbeat read failed because file content was not a valid timestamp at {HeartbeatPath}",
+                FilePath
+            );
+            return null;
         }
         catch (Exception ex)
         {

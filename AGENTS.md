@@ -20,6 +20,7 @@ Injection
     - Monitors USB device insertion/removal via WMI `__InstanceCreationEvent` and `__InstanceDeletionEvent`
     - Maintains `DeviceList` and `DeviceEventList` as `ObservableCollection<T>` instances for UI binding
     - Screens for HID keyboard/mouse devices only (`kbdhid`, `mouhid` services)
+    - Aggregates bursty insert callbacks into one logical `Connected` event per device burst
     - Writes app/device lifecycle events and keeps the in-memory device snapshot in sync
     - Owns the heartbeat timer used by crash recovery
     - See: `Services/UsbMonitorService.cs`
@@ -81,6 +82,12 @@ Injection
       `ConnectionStarted` for each one,
     - then WMI watchers are started for live insert/remove events.
 8. Resolve `RawInputService` and call `Start()` to create the hidden message-only window and begin receiving `WM_INPUT`.
+
+### Shutdown / Disposal Ownership
+
+- During normal application exit, DI owns disposal of singleton services via `ServiceProvider.Dispose()`.
+- Singleton `Dispose()` methods are idempotent and may still be called from crash/unhandled-exception cleanup paths.
+- Duplicate dispose attempts should return immediately and log a `Debug` message rather than performing cleanup twice.
 
 ---
 
@@ -149,8 +156,9 @@ Device state management is centralized in `UsbMonitorService.AddDeviceEvent()`:
 ### Duplicate Detection
 
 - WMI fires multiple insert events (~2-3) per physical USB connection
-- `_cachedDevices` de-duplicates by aggregating keyboard/mouse interface signals inside a short time window
-- Only then a single `Connected` event is recorded
+- `_cachedDevices` stores aggregated keyboard/mouse interface signals inside a short time window
+- `_pendingCachedDeviceProcessing` ensures only one delayed aggregation callback runs per device burst, preventing a multi-callback race
+- Only then is a single `Connected` event recorded
 - `DeviceEvents` unique constraint prevents DB duplicates even if code fails
 
 ---
@@ -251,7 +259,15 @@ dotnet ef database update SomeOlderMigrationName
 - `DeviceNameLookup.GetDeviceName(deviceId)` first attempts native SetupAPI/cfgmgr32 lookup
 - Falls back to `PowershellScripts.GetDeviceName(deviceId)` only if native lookup fails
 - Falls back to `"Unknown Device"` if lookup fails
+- Native lookup and PowerShell fallback paths log at `Debug`; lookup failures that throw log at `Warning`
 - User can rename devices; changes saved immediately to DB
+
+### Helper Logging Conventions
+
+- Pure helpers such as `RelayCommand`, `AsyncRelayCommand`, `ObservableObject`, and `TimeFormatter` should stay log-free.
+- Helpers that touch the file system, PowerShell, SetupAPI/cfgmgr32, or crash-recovery inputs should log meaningful failures.
+- `HeartbeatFile.Read()` should log `Debug` when no heartbeat file exists and `Warning` if the file exists but contains an invalid timestamp.
+- `UsbDeviceClassifier.ResolveDeviceType()` logs `Warning` when the observed signal pattern does not match a known keyboard/mouse shape.
 
 ### Documentation Entry Points
 

@@ -12,23 +12,23 @@ captures minute-level raw input activity, and stores everything in a local SQLit
 KeyPulse Signal targets `.NET 8` with `net8.0-windows` and depends on Windows-specific technologies including WPF,
 WMI (`System.Management`), Windows Raw Input (`WM_INPUT`), and the WinForms tray icon API.
 
-## What It Does
+## Core Functionality
 
-- Detects USB keyboard/mouse devices currently connected to the system at app startup.
-- Watches live insert/remove events using WMI.
-- Tracks per-device current session time while a device is connected.
-- Calculates `Total Usage` from persisted connection event history.
-- Captures per-device minute buckets of keyboard/mouse activity:
+- Detects USB keyboard and mouse devices connected to the system at startup.
+- Monitors device insertion and removal events via WMI.
+- Maintains per-device session duration tracking for active connections.
+- Derives total usage metrics from persisted connection event history.
+- Records minute-level activity snapshots per device, including:
   - keystroke counts,
   - mouse click counts,
   - mouse movement active seconds (`0`-`60`).
-- Highlights device icons when keys or mouse buttons are currently held.
-- Includes a dashboard with:
+- Provides real-time visual indicators for active input (key/button hold state).
+- Implements a comprehensive dashboard featuring:
   - connected-device and top-usage summary cards,
-  - keyboard/mouse usage pie charts by selected time range,
-  - an input-activity timeline with bucket-size and smoothing controls.
-- Provides a device list UI with rename support and an event log view.
-- Supports tray/background startup in production builds.
+  - keyboard/mouse usage distribution charts with configurable time ranges,
+  - activity timeline visualization with adjustable bucket size and smoothing parameters.
+- Offers a device management interface with support for device renaming and event history inspection.
+- Supports background/tray startup mode for production deployments.
 
 ## Tech Stack
 
@@ -52,31 +52,30 @@ WMI (`System.Management`), Windows Raw Input (`WM_INPUT`), and the WinForms tray
 - `CHANGELOG.md`
   - notable release-to-release changes
 
-## Runtime Behavior Worth Knowing
+## Runtime Behavior
 
-- Single-instance per build mode: one `Debug` and one
-  `Release` instance can run at the same time; launching another instance in the same mode signals that mode's existing instance to restore/focus.
-- Startup flow:
-  - runs database migrations,
-  - recovers from an unclean previous shutdown if needed,
-  - rebuilds persisted device usage snapshots,
-  - loads persisted devices/events,
-  - snapshots currently connected HID devices,
-  - starts WMI watchers for live changes,
-  - starts Raw Input capture for live per-device activity.
-- `TotalUsage` is derived from connection events and ticks live while a device is connected.
-- `IsConnected` is the current connection state used for filtering the default device list.
-- `IsActive` is separate from connection state:
-  - it is a transient live flag driven by raw keyboard/mouse hold state,
-  - it is used for activity highlighting, not persisted connection state.
-- Activity snapshots are stored per device per minute in `ActivitySnapshots`.
-- Dashboard activity timeline behavior:
-  - bucket values are forced to zero while the app was not running,
-  - keyboard series = `Keystrokes`, mouse series = `MouseClicks + MouseMovementSeconds`,
-  - X-axis labels switch by range: `MM-dd HH:mm` (< 7 days), `MM-dd` (>= 7 days), `yyyy-MM` (>= 1 year).
-- Database file path:
-  - `Release`: `%AppData%\\KeyPulse\\keypulse-data.db`
-  - `Debug` / testing: `%AppData%\\KeyPulse\\Test\\keypulse-data.db`
+- **Single-instance enforcement**: Only one instance per build configuration is permitted to run; launching a second instance in the same mode will signal the existing instance to activate and return focus.
+- **Initialization sequence**:
+  - Executes database migrations,
+  - Performs crash recovery for unclean shutdowns if necessary,
+  - Rebuilds persisted device usage snapshots,
+  - Loads persisted devices and lifecycle events,
+  - Catalogs currently connected HID-compliant devices,
+  - Initializes WMI event watchers for device state changes,
+  - Begins capturing per-device raw input activity.
+- **Usage metrics**: `TotalUsage` is computed from connection events and continuously increments while a device maintains an active session.
+- **Connection state**: `IsConnected` reflects the current connection state and is used for device list filtering.
+- **Activity state**: `IsActive` is a transient flag distinct from connection state, driven by momentary raw input (key/button hold) and used for activity highlighting only.
+- **Activity snapshots**: Input activity is persisted at minute-level granularity per device in the `ActivitySnapshots` table.
+- **Dashboard timeline semantics**:
+  - Activity buckets reflect zero contribution during periods when the application was not running,
+  - keyboard activity displays keystroke counts; mouse activity displays click counts plus movement-active seconds,
+  - X-axis timestamp format adapts to the selected time range: `MM-dd HH:mm` (< 7 days), `MM-dd` (≥ 7 days and < 365 days), `yyyy-MM` (≥ 365 days).
+- **Logging**: Application logs are written to rolling daily files under `%AppData%\KeyPulse\Logs` (Release) or `%AppData%\KeyPulse\Test\Logs` (Debug/testing).
+- **Service lifecycle**: Singleton services are disposed through the dependency injection container during graceful application termination; `Dispose()` methods implement idempotency and log redundant invocations at debug level.
+- **Data persistence**:
+  - `Release`: `%AppData%\KeyPulse\keypulse-data.db`
+  - `Debug` / testing: `%AppData%\KeyPulse\Test\keypulse-data.db`
 
 ## Data Model
 
@@ -111,9 +110,9 @@ Launch argument override:
 - Build fails because `KeyPulse Signal.exe` is locked:
   - stop the running app before rebuilding Debug output.
 - Device name appears as `Unknown Device`:
-  - Windows did not provide a friendly name for that device ID at lookup time.
+  - Windows did not provide a friendly name for that device ID at lookup time; the app tries native SetupAPI/cfgmgr32 lookup first and only falls back to PowerShell if native lookup returns nothing.
 - Duplicate event warnings in debug output:
-  - expected in some cases; duplicate event inserts are skipped safely.
+  - WMI can emit multiple insert callbacks for one physical USB connect; the app aggregates bursty callbacks into one logical connection and the database uniqueness constraint remains a secondary safeguard.
 - Devices appear stuck as connected after a crash or forced stop:
   - the next startup runs crash recovery and backfills missing `AppEnded` / `ConnectionEnded` events.
 
@@ -162,6 +161,7 @@ For installed users, updates are installer-driven: run the latest installer over
 
 - `UsbMonitorService`
   - handles WMI device detection,
+  - aggregates bursty insert callbacks before emitting one logical `Connected` event,
   - manages in-memory `DeviceList` and `DeviceEventList`,
   - writes lifecycle events and updates device connection snapshots.
 - `RawInputService`
@@ -172,4 +172,5 @@ For installed users, updates are installer-driven: run the latest installer over
   - owns database access,
   - runs migrations,
   - performs crash recovery,
-  - rebuilds persisted usage snapshots on startup.
+  - rebuilds persisted usage snapshots on startup,
+  - relies on `HeartbeatFile` to estimate the approximate end time of an unclean previous session.

@@ -1,5 +1,6 @@
 ﻿using System.Management;
 using KeyPulse.Models;
+using Serilog;
 
 namespace KeyPulse.Helpers;
 
@@ -35,6 +36,11 @@ internal static class UsbDeviceClassifier
         if (keyboardSignals == 2 && mouseSignals == 1)
             return DeviceTypes.Keyboard;
 
+        Log.Warning(
+            "Unable to determine device type from pattern: {KeyboardSignals} keyboard signals, {MouseSignals} mouse signals",
+            keyboardSignals,
+            mouseSignals
+        );
         return DeviceTypes.Other;
     }
 }
