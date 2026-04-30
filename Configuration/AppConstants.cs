@@ -65,7 +65,7 @@ public static class AppConstants
 
     public static class UsbMonitoring
     {
-        public const int SignalAggregationSeconds = 1;
+        public const int SignalAggregationSeconds = 3;
         public const int HeartbeatIntervalSeconds = 30;
         public const string UnknownDeviceName = "Unknown Device";
     }

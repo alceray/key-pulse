@@ -19,12 +19,13 @@ public class UsbMonitorService : IDisposable
     public ObservableCollection<DeviceEvent> DeviceEventList;
     public DateTime AppSessionStartedAt { get; private set; }
 
-    // on every irl connection, 2-3 events are created within a short timeframe, so this cache of recent devices
-    // prevents inserting duplicate events in the db.
+    // A single physical USB connect can raise multiple WMI insert events in quick succession,
+    // so this cache aggregates interface signals into one logical connection and avoids duplicates.
     private readonly ConcurrentDictionary<
         string,
         (int KeyboardSignals, int MouseSignals, DateTime FirstTimestamp)
     > _cachedDevices = new();
+    private readonly ConcurrentDictionary<string, byte> _pendingCachedDeviceProcessing = new();
 
     private static readonly TimeSpan SignalAggregationWindow = TimeSpan.FromSeconds(
         AppConstants.UsbMonitoring.SignalAggregationSeconds
@@ -169,8 +170,6 @@ public class UsbMonitorService : IDisposable
             if (instance == null)
                 return;
 
-            //printObj(instance);
-
             var deviceId = ExtractDeviceId(instance);
             if (string.IsNullOrEmpty(deviceId))
                 return;
@@ -201,7 +200,20 @@ public class UsbMonitorService : IDisposable
 
             _cachedDevices[deviceId] = (keyboardSignals, mouseSignals, firstTimestamp);
 
-            Task.Delay(SignalAggregationWindow).ContinueWith(_ => ProcessCachedDevice(deviceId));
+            // Prevent a multi-callback race by allowing only one delayed aggregation task per device burst.
+            if (_pendingCachedDeviceProcessing.TryAdd(deviceId, 0))
+                _ = Task.Run(async () =>
+                {
+                    await Task.Delay(SignalAggregationWindow);
+                    try
+                    {
+                        ProcessCachedDevice(deviceId);
+                    }
+                    finally
+                    {
+                        _pendingCachedDeviceProcessing.TryRemove(deviceId, out _);
+                    }
+                });
         }
         catch (Exception ex)
         {
@@ -215,6 +227,14 @@ public class UsbMonitorService : IDisposable
         {
             if (!_cachedDevices.TryGetValue(deviceId, out var cached))
                 return;
+
+            // If latest event is already an opening event, skip emitting another Connected.
+            var latestDeviceEvent = _dataService.GetLastDeviceEvent(deviceId);
+            if (latestDeviceEvent?.EventType.IsOpeningEvent() == true)
+            {
+                _cachedDevices.TryRemove(deviceId, out _);
+                return;
+            }
 
             var (keyboardSignals, mouseSignals, firstTimestamp) = cached;
 
@@ -500,5 +520,7 @@ public class UsbMonitorService : IDisposable
 
         shutdownStopwatch.Stop();
         Log.Information("USB monitoring shutdown completed in {ElapsedMs}ms", shutdownStopwatch.ElapsedMilliseconds);
+
+        _pendingCachedDeviceProcessing.Clear();
     }
 }
