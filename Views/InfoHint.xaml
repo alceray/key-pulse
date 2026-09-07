@@ -23,7 +23,7 @@
       Kind="Info"
       Width="14"
       Height="14"
-      Foreground="{x:Static config:AppColorPalette.SecondaryTextBrush}"
+      Foreground="{DynamicResource SecondaryTextBrush}"
     />
   </Border>
 </UserControl>

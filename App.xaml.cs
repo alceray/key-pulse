@@ -84,6 +84,7 @@ public partial class App
         IDatabaseCredentialStore preflightCredentialStore = new WindowsDatabaseCredentialStore();
         var showedInitialDatabaseSetup = false;
         var preflightSettings = preflightSettingsService.GetSettings();
+        ThemeService.ApplyTheme(preflightSettings.DarkMode);
         if (preflightSettings.IsFirstLaunch)
         {
             var setupWindow = new DatabaseSetupWindow(_appName, preflightSettingsService, preflightCredentialStore);
@@ -160,6 +161,7 @@ public partial class App
         ServiceProvider = services.BuildServiceProvider();
 
         _appSettingsService = ServiceProvider.GetRequiredService<AppSettingsService>();
+        ServiceProvider.GetRequiredService<ThemeService>();
         _startupRegistrationService = ServiceProvider.GetRequiredService<StartupRegistrationService>();
         _updateService = ServiceProvider.GetRequiredService<UpdateService>();
         _trayIconService = ServiceProvider.GetRequiredService<TrayIconService>();
@@ -310,6 +312,7 @@ public partial class App
     private static void ConfigureServices(IServiceCollection services, DatabaseInstanceLock databaseInstanceLock)
     {
         services.AddSingleton<AppSettingsService>();
+        services.AddSingleton<ThemeService>();
         services.AddSingleton<IDatabaseCredentialStore, WindowsDatabaseCredentialStore>();
         services.AddSingleton<IDbContextFactory<ApplicationDbContext>, ConfiguredDbContextFactory>();
         services.AddSingleton(databaseInstanceLock);

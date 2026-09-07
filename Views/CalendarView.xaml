@@ -90,7 +90,7 @@
           Text="Loading…"
           HorizontalAlignment="Center"
           VerticalAlignment="Center"
-          Foreground="{x:Static config:AppColorPalette.MutedBrush}"
+          Foreground="{DynamicResource MutedBrush}"
           Visibility="{Binding IsLoading, Converter={StaticResource BooleanToVisibilityConverter}}"
         />
 
@@ -119,19 +119,19 @@
                                 <!-- Only days with activity are clickable, so only they get the hand cursor. -->
                                 <Setter Property="BorderThickness" Value="0" />
                                 <Setter Property="Cursor" Value="Arrow" />
-                                <Setter Property="Background" Value="{x:Static config:AppColorPalette.SurfaceBrush}" />
+                                <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
                                 <Style.Triggers>
                                   <DataTrigger Binding="{Binding HasData}" Value="True">
                                     <Setter
                                       Property="Background"
-                                      Value="{x:Static config:AppColorPalette.CalendarTileBackgroundBrush}"
+                                      Value="{DynamicResource CalendarTileBackgroundBrush}"
                                     />
                                     <Setter Property="Cursor" Value="Hand" />
                                   </DataTrigger>
                                   <DataTrigger Binding="{Binding IsSelected}" Value="True">
                                     <Setter
                                       Property="Background"
-                                      Value="{x:Static config:AppColorPalette.CalendarSelectedTileBackgroundBrush}"
+                                      Value="{DynamicResource CalendarSelectedTileBackgroundBrush}"
                                     />
                                   </DataTrigger>
                                 </Style.Triggers>
@@ -153,7 +153,7 @@
                                   DockPanel.Dock="Right"
                                   Text="today"
                                   FontSize="12"
-                                  Foreground="{x:Static config:AppColorPalette.PrimaryTextBrush}"
+                                  Foreground="{DynamicResource PrimaryTextBrush}"
                                   VerticalAlignment="Center"
                                   Visibility="{Binding IsToday, Converter={StaticResource BooleanToVisibilityConverter}}"
                                 />
@@ -222,7 +222,7 @@
     <!-- Right: Day detail panel -->
     <Grid Grid.Column="1">
       <Border
-        BorderBrush="{x:Static config:AppColorPalette.BorderBrush}"
+        BorderBrush="{DynamicResource BorderBrush}"
         BorderThickness="1"
         CornerRadius="4"
         Padding="12"
@@ -232,7 +232,7 @@
             <!-- No day selected -->
             <TextBlock
               Text="Select a day to see details"
-              Foreground="{x:Static config:AppColorPalette.MutedBrush}"
+              Foreground="{DynamicResource MutedBrush}"
               HorizontalAlignment="Center"
               Margin="0,40,0,0"
               Visibility="{Binding HasSelectedDay, Converter={StaticResource InverseBoolToVisibilityConverter}}"
@@ -261,7 +261,7 @@
                         />
                         <TextBlock
                           Text="{Binding DeviceTypeText}"
-                          Foreground="{x:Static config:AppColorPalette.SecondaryTextBrush}"
+                          Foreground="{DynamicResource SecondaryTextBrush}"
                         />
 
                         <StackPanel Margin="0,6,0,0" Orientation="Vertical" TextElement.FontSize="12">
@@ -277,7 +277,7 @@
                             Style="{StaticResource ActivityProgressBarStyle}"
                             Maximum="86400"
                             Value="{Binding ConnectionSeconds, Mode=OneWay}"
-                            Foreground="{x:Static config:AppColorPalette.ConnectedBrush}"
+                            Foreground="{DynamicResource ConnectedBrush}"
                           />
                           <DockPanel Margin="0,0,0,3">
                             <TextBlock DockPanel.Dock="Left" Text="Active time" Style="{StaticResource DetailLabelStyle}" />
@@ -291,7 +291,7 @@
                             Style="{StaticResource ActivityProgressBarStyle}"
                             Maximum="86400"
                             Value="{Binding ActiveSeconds, Mode=OneWay}"
-                            Foreground="{x:Static config:AppColorPalette.ActiveBrush}"
+                            Foreground="{DynamicResource ActiveBrush}"
                           />
                           <DockPanel
                             Margin="0,0,0,8"
@@ -348,7 +348,7 @@
                                       <Rectangle Width="8" Height="{Binding BarHeight}" VerticalAlignment="Bottom">
                                         <Rectangle.Style>
                                           <Style TargetType="Rectangle">
-                                            <Setter Property="Fill" Value="{x:Static config:AppColorPalette.ActiveBrush}" />
+                                            <Setter Property="Fill" Value="{DynamicResource ActiveBrush}" />
                                           </Style>
                                         </Rectangle.Style>
                                       </Rectangle>
@@ -377,14 +377,14 @@
                                       <TextBlock
                                         Text="{Binding MajorLabel}"
                                         FontSize="9"
-                                        Foreground="{x:Static config:AppColorPalette.SecondaryTextBrush}"
+                                        Foreground="{DynamicResource SecondaryTextBrush}"
                                         HorizontalAlignment="Center"
                                         Margin="-20,0,-20,0"
                                       />
                                       <TextBlock
                                         Text="{Binding MinorLabel}"
                                         FontSize="9"
-                                        Foreground="{x:Static config:AppColorPalette.SecondaryTextBrush}"
+                                        Foreground="{DynamicResource SecondaryTextBrush}"
                                         HorizontalAlignment="Center"
                                         Margin="-20,0,-20,0"
                                         Visibility="{Binding RelativeSource={RelativeSource FindAncestor, AncestorType=ItemsControl}, Path=ActualWidth, Converter={StaticResource MinWidthToVisibilityConverter}, ConverterParameter=200}"

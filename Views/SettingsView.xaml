@@ -11,7 +11,7 @@
   <UserControl.Resources>
     <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
 
-    <Style x:Key="StorageOptionStyle" TargetType="RadioButton">
+    <Style x:Key="StorageOptionStyle" TargetType="RadioButton" BasedOn="{StaticResource {x:Type RadioButton}}">
       <Setter Property="Cursor" Value="Hand" />
       <Setter Property="Margin" Value="0,0,8,0" />
       <Setter Property="Template">
@@ -20,8 +20,8 @@
             <Border
               x:Name="Card"
               Padding="12"
-              Background="White"
-              BorderBrush="{x:Static config:AppColorPalette.BorderBrush}"
+              Background="{DynamicResource WindowBackgroundBrush}"
+              BorderBrush="{DynamicResource BorderBrush}"
               BorderThickness="1"
               CornerRadius="5"
             >
@@ -29,11 +29,11 @@
             </Border>
             <ControlTemplate.Triggers>
               <Trigger Property="IsMouseOver" Value="True">
-                <Setter TargetName="Card" Property="Background" Value="{x:Static config:AppColorPalette.SurfaceBrush}" />
+                <Setter TargetName="Card" Property="Background" Value="{DynamicResource SurfaceBrush}" />
               </Trigger>
 
               <Trigger Property="IsChecked" Value="True">
-                <Setter TargetName="Card" Property="BorderBrush" Value="{x:Static config:AppColorPalette.PrimaryTextBrush}" />
+                <Setter TargetName="Card" Property="BorderBrush" Value="{DynamicResource PrimaryTextBrush}" />
               </Trigger>
             </ControlTemplate.Triggers>
           </ControlTemplate>
@@ -49,10 +49,16 @@
         <Border Style="{StaticResource SectionCardStyle}">
           <StackPanel>
             <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-              <iconPacks:PackIconPhosphorIcons Kind="Gear" Width="16" Height="16" VerticalAlignment="Center" Foreground="Black" />
+              <iconPacks:PackIconPhosphorIcons Kind="Gear" Width="16" Height="16" VerticalAlignment="Center" Foreground="{DynamicResource PrimaryTextBrush}" />
               <TextBlock Text="General" Style="{StaticResource SectionTitleStyle}" />
             </StackPanel>
             <Border Style="{StaticResource SectionDividerStyle}" />
+
+            <CheckBox
+              Content="Dark mode"
+              IsChecked="{Binding DarkMode, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+              Margin="0,0,0,10"
+            />
 
             <CheckBox
               Content="Launch on login"
@@ -88,7 +94,7 @@
         <Border Style="{StaticResource SectionCardStyle}">
           <StackPanel>
             <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-              <iconPacks:PackIconPhosphorIcons Kind="Database" Width="16" Height="16" VerticalAlignment="Center" Foreground="Black" />
+              <iconPacks:PackIconPhosphorIcons Kind="Database" Width="16" Height="16" VerticalAlignment="Center" Foreground="{DynamicResource PrimaryTextBrush}" />
               <TextBlock Text="Storage" Style="{StaticResource SectionTitleStyle}" />
             </StackPanel>
             <Border Style="{StaticResource SectionDividerStyle}" />
@@ -105,12 +111,12 @@
                 IsChecked="{Binding UseSqliteStorage, Mode=TwoWay}"
               >
                 <StackPanel Orientation="Horizontal">
-                  <iconPacks:PackIconSimpleIcons Kind="SqLite" Width="20" Height="20" VerticalAlignment="Center" Foreground="#003B57" />
+                  <iconPacks:PackIconSimpleIcons Kind="SqLite" Width="20" Height="20" VerticalAlignment="Center" Foreground="{DynamicResource SqliteLogoBrush}" />
                   <TextBlock Text="SQLite" Margin="8,0,0,0" VerticalAlignment="Center" />
                   <TextBlock
                     Text="In use"
                     Visibility="{Binding IsSqliteActive, Converter={StaticResource BoolToVisibility}}"
-                    Foreground="{x:Static config:AppColorPalette.MutedBrush}"
+                    Foreground="{DynamicResource MutedBrush}"
                     FontSize="11"
                     Margin="8,0,0,0"
                     VerticalAlignment="Center"
@@ -125,12 +131,12 @@
                 IsChecked="{Binding UsePostgreSqlStorage, Mode=TwoWay}"
               >
                 <StackPanel Orientation="Horizontal">
-                  <iconPacks:PackIconSimpleIcons Kind="PostgreSql" Width="20" Height="20" VerticalAlignment="Center" Foreground="#336791" />
+                  <iconPacks:PackIconSimpleIcons Kind="PostgreSql" Width="20" Height="20" VerticalAlignment="Center" Foreground="{DynamicResource PostgreSqlLogoBrush}" />
                   <TextBlock Text="PostgreSQL" Margin="8,0,0,0" VerticalAlignment="Center" />
                   <TextBlock
                     Text="In use"
                     Visibility="{Binding IsPostgreSqlActive, Converter={StaticResource BoolToVisibility}}"
-                    Foreground="{x:Static config:AppColorPalette.MutedBrush}"
+                    Foreground="{DynamicResource MutedBrush}"
                     FontSize="11"
                     Margin="8,0,0,0"
                     VerticalAlignment="Center"
@@ -154,7 +160,7 @@
                   <TextBlock Text="{Binding PostgreSqlSummary}" TextTrimming="CharacterEllipsis" />
                   <TextBlock
                     Text="{Binding PostgreSqlSslSummary}"
-                    Foreground="{x:Static config:AppColorPalette.MutedBrush}"
+                    Foreground="{DynamicResource MutedBrush}"
                     FontSize="11"
                     Margin="0,3,0,0"
                   />
@@ -173,7 +179,7 @@
                 <TextBlock
                   Text="Host, port, and database stay fixed while PostgreSQL is in use. Switch to SQLite first to point KeyPulse at a different database."
                   Visibility="{Binding IsPostgreSqlActive, Converter={StaticResource BoolToVisibility}}"
-                  Foreground="{x:Static config:AppColorPalette.MutedBrush}"
+                  Foreground="{DynamicResource MutedBrush}"
                   FontSize="11"
                   TextWrapping="Wrap"
                   Margin="0,0,0,10"
@@ -215,7 +221,7 @@
                     Grid.ColumnSpan="3"
                     Text="Leave blank to keep the saved password."
                     Visibility="{Binding IsPostgreSqlActive, Converter={StaticResource BoolToVisibility}}"
-                    Foreground="{x:Static config:AppColorPalette.MutedBrush}"
+                    Foreground="{DynamicResource MutedBrush}"
                     FontSize="11"
                     Margin="0,0,0,8"
                   />
@@ -246,7 +252,7 @@
         <Border Style="{StaticResource SectionCardStyle}">
           <StackPanel>
             <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-              <iconPacks:PackIconPhosphorIcons Kind="ArrowsClockwise" Width="16" Height="16" VerticalAlignment="Center" Foreground="Black" />
+              <iconPacks:PackIconPhosphorIcons Kind="ArrowsClockwise" Width="16" Height="16" VerticalAlignment="Center" Foreground="{DynamicResource PrimaryTextBrush}" />
               <TextBlock Text="Updates" Style="{StaticResource SectionTitleStyle}" />
             </StackPanel>
             <Border Style="{StaticResource SectionDividerStyle}" />

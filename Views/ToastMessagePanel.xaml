@@ -10,7 +10,7 @@
   <Border
     Padding="14,8"
     CornerRadius="6"
-    Background="{x:Static config:AppColorPalette.ToastBackgroundBrush}"
+    Background="{DynamicResource ToastBackgroundBrush}"
     IsHitTestVisible="False"
     Visibility="{Binding ToastVisibility, ElementName=Root}"
   >

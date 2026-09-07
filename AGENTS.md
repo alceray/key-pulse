@@ -285,7 +285,7 @@ dotnet ef database update SomeOlderMigrationName
 | `Services/`   | `UsbMonitorService`, `RawInputService`, `DataService`, `DailyStatsService` — monitoring, activity capture, persistence, daily stats |
 | `Models/`     | `Device`, `DeviceEvent`, `ActivitySnapshot`, `DailyDeviceStat` + enums/extensions                               |
 | `Data/`       | `ApplicationDbContext`, database initialization                                                                  |
-| `Configuration/` | `AppConstants` plus `AppColorPalette` — the single source of UI colors. `AppColorPalette.cs` holds the frozen `Brush`/`Color` palette (consumed from code and from XAML via `{x:Static config:AppColorPalette.X}`); reusable control styles live in `Views/Styles/AppStyles.xaml` (merged globally in `App.xaml`) and reference those brushes. The OxyPlot chart palette (`DashboardDeviceColorPalette`) is intentionally separate. A named-color reference chart for choosing brush names lives at [docs/design/art-color-table.png](docs/design/art-color-table.png) |
+| `Configuration/` | `AppConstants` plus `AppColorPalette` — the single source of light/dark UI colors. Brushes stay frozen; XAML uses `{DynamicResource PrimaryTextBrush}` (and the other named keys) so existing controls update immediately. Shared control templates live in `Views/Styles/ThemeControls.xaml`, and per-view reusable styles in `Views/Styles/AppStyles.xaml`; both are merged globally in `App.xaml`. The OxyPlot device palette (`DashboardDeviceColorPalette`) is intentionally separate. |
 | `ViewModels/` | MVVM viewmodels for each UI view; `StatusMessageViewModelBase` provides shared status toast behavior. `Dashboard/` and `Calendar/` subfolders hold the chart/pie/color builders, DTOs, and per-view helpers extracted from the larger view-models |
 | `Views/`      | XAML + code-behind for UI; `StatusMessagePanel` is a reusable status toast control; `SharedConverters.cs` holds shared `IValueConverter`s (e.g. `InverseBoolToVisibilityConverter`, `DurationSecondsConverter`); `Styles/AppStyles.xaml` holds the app-wide control styles |
 | `Migrations/` | EF Core snapshot migrations (read-only; auto-generated)                                                          |
@@ -369,6 +369,14 @@ dotnet ef database update SomeOlderMigrationName
 - `StatusMessagePanel` (`Views/`) is the reusable XAML control with `StatusMessage` and `StatusVisibility` dependency properties.
 - Positioning (alignment, margin, grid row) is controlled by the host view — the panel itself is layout-agnostic.
 
+### Application Theme
+
+- `AppUserSettings.DarkMode` defaults to `false` and is saved by the General section in Settings.
+- `ThemeService` applies the saved palette before database setup/recovery windows open, then subscribes to settings changes through DI. All resource updates and `ThemeChanged` notifications run on the UI thread.
+- Use dynamic brush resources in XAML, including trigger setters. Log `Run` elements use `SetResourceReference` so a switch preserves the existing document, search match, and scroll position.
+- `DashboardViewModel` rebuilds plots from cached inputs on a theme change (no database query). `DashboardPlotTheme.Apply` runs after fresh series are installed on the UI thread, preserving activity axes and zoom; it expects original device-series colors, not previously themed colors.
+- Windows 11 title bars follow the theme through `WindowTheme`. Native Windows message boxes and tray menus retain their system appearance.
+
 ### Dispatcher Safety in Services
 
 Services that receive background callbacks (WMI events, `RawInputService` message pump) and update UI-bound collections must guard Dispatcher calls.
@@ -417,4 +425,3 @@ Pure services (`DataService`, `DailyStatsService`, helpers) do **not** need disp
 - `ViewModels/StatusMessageViewModelBase.cs` → shared status toast VM base
 - `Views/StatusMessagePanel.xaml` → reusable status toast control
 - `Models/Device.cs`, `Models/DeviceEvent.cs`, `Models/ActivitySnapshot.cs`, `Models/DailyDeviceStat.cs` → persisted models and runtime state
-

@@ -50,7 +50,7 @@
               HorizontalAlignment="Right"
               VerticalAlignment="Center"
               Margin="0,0,8,0"
-              Foreground="{x:Static config:AppColorPalette.SecondaryTextBrush}"
+              Foreground="{DynamicResource SecondaryTextBrush}"
               IsHitTestVisible="False"
               Visibility="Collapsed"
             />
@@ -70,8 +70,8 @@
               Placement="Custom"
             >
               <Border
-                Background="{DynamicResource {x:Static SystemColors.WindowBrushKey}}"
-                BorderBrush="{x:Static config:AppColorPalette.BorderBrush}"
+                Background="{DynamicResource WindowBackgroundBrush}"
+                BorderBrush="{DynamicResource BorderBrush}"
                 BorderThickness="1"
                 Padding="4"
               >
@@ -83,10 +83,29 @@
                           <Ellipse
                             Width="8"
                             Height="8"
-                            Fill="{Binding LevelBrush}"
                             Margin="0,0,6,0"
                             VerticalAlignment="Center"
-                          />
+                          >
+                            <Ellipse.Style>
+                              <Style TargetType="Ellipse">
+                                <Setter Property="Fill" Value="{DynamicResource MutedBrush}" />
+                                <Style.Triggers>
+                                  <DataTrigger Binding="{Binding Name}" Value="Fatal">
+                                    <Setter Property="Fill" Value="{DynamicResource FatalBrush}" />
+                                  </DataTrigger>
+                                  <DataTrigger Binding="{Binding Name}" Value="Error">
+                                    <Setter Property="Fill" Value="{DynamicResource ErrorBrush}" />
+                                  </DataTrigger>
+                                  <DataTrigger Binding="{Binding Name}" Value="Warning">
+                                    <Setter Property="Fill" Value="{DynamicResource WarningBrush}" />
+                                  </DataTrigger>
+                                  <DataTrigger Binding="{Binding Name}" Value="Information">
+                                    <Setter Property="Fill" Value="{DynamicResource InformationBrush}" />
+                                  </DataTrigger>
+                                </Style.Triggers>
+                              </Style>
+                            </Ellipse.Style>
+                          </Ellipse>
                           <TextBlock>
                             <Run Text="{Binding Name, Mode=OneWay}" />
                             <Run Text=" (" />
@@ -117,7 +136,7 @@
 
     <Border
       Grid.Row="1"
-      BorderBrush="{x:Static config:AppColorPalette.BorderBrush}"
+      BorderBrush="{DynamicResource BorderBrush}"
       BorderThickness="1"
       CornerRadius="4"
       Padding="8"

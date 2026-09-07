@@ -14,7 +14,14 @@
     <local:DurationSecondsConverter x:Key="DurationSecondsConverter" />
     <local:DeviceTypeToVisibilityConverter x:Key="DeviceTypeToVisibilityConverter" />
     <local:DeviceTypeToBooleanConverter x:Key="DeviceTypeToBooleanConverter" />
-    <local:ActivityColorConverter x:Key="ActivityColorConverter" />
+    <Style x:Key="DeviceActivityIconStyle" TargetType="iconPacks:PackIconPhosphorIcons">
+      <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}" />
+      <Style.Triggers>
+        <DataTrigger Binding="{Binding IsActive}" Value="True">
+          <Setter Property="Foreground" Value="{DynamicResource ActiveBrush}" />
+        </DataTrigger>
+      </Style.Triggers>
+    </Style>
   </UserControl.Resources>
 
   <Grid>
@@ -57,19 +64,19 @@
       <DataGrid.Resources>
         <Style TargetType="DataGridRow">
           <Setter Property="Background" Value="Transparent" />
-          <Setter Property="Foreground" Value="Black" />
+          <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}" />
           <Setter Property="BorderBrush" Value="Transparent" />
           <EventSetter Event="PreviewMouseRightButtonDown" Handler="DataGridRow_PreviewMouseRightButtonDown" />
           <Style.Triggers>
             <Trigger Property="IsMouseOver" Value="True">
-              <Setter Property="Background" Value="{x:Static config:AppColorPalette.HoverBrush}" />
+              <Setter Property="Background" Value="{DynamicResource HoverBrush}" />
             </Trigger>
           </Style.Triggers>
         </Style>
 
         <Style TargetType="DataGridCell">
           <Setter Property="Background" Value="Transparent" />
-          <Setter Property="Foreground" Value="Black" />
+          <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}" />
           <Setter Property="BorderBrush" Value="Transparent" />
           <Setter Property="BorderThickness" Value="0" />
           <!-- Center cell content vertically while the Border still fills the row height. -->
@@ -102,7 +109,7 @@
               <Setter Property="BorderThickness" Value="0" />
               <Setter Property="BorderBrush" Value="Transparent" />
               <Setter Property="Background" Value="Transparent" />
-              <Setter Property="Foreground" Value="{x:Static config:AppColorPalette.DisconnectedBrush}" />
+              <Setter Property="Foreground" Value="{DynamicResource DisconnectedBrush}" />
               <Setter Property="Template">
                 <Setter.Value>
                   <ControlTemplate TargetType="DataGridCell">
@@ -114,10 +121,10 @@
               </Setter>
               <Style.Triggers>
                 <DataTrigger Binding="{Binding StatusText}" Value="Connected">
-                  <Setter Property="Foreground" Value="{x:Static config:AppColorPalette.ConnectedBrush}" />
+                  <Setter Property="Foreground" Value="{DynamicResource ConnectedBrush}" />
                 </DataTrigger>
                 <DataTrigger Binding="{Binding StatusText}" Value="Hidden">
-                  <Setter Property="Foreground" Value="{x:Static config:AppColorPalette.HiddenBrush}" />
+                  <Setter Property="Foreground" Value="{DynamicResource HiddenBrush}" />
                 </DataTrigger>
               </Style.Triggers>
             </Style>
@@ -130,14 +137,14 @@
                   Width="24"
                   Height="24"
                   Visibility="{Binding DeviceType, Converter={StaticResource DeviceTypeToVisibilityConverter}, ConverterParameter=Keyboard}"
-                  Foreground="{Binding IsActive, Converter={StaticResource ActivityColorConverter}}"
+                  Style="{StaticResource DeviceActivityIconStyle}"
                 />
                 <iconPacks:PackIconPhosphorIcons
                   Kind="Mouse"
                   Width="24"
                   Height="24"
                   Visibility="{Binding DeviceType, Converter={StaticResource DeviceTypeToVisibilityConverter}, ConverterParameter=Mouse}"
-                  Foreground="{Binding IsActive, Converter={StaticResource ActivityColorConverter}}"
+                  Style="{StaticResource DeviceActivityIconStyle}"
                 />
                 <TextBlock Text="{Binding StatusText}" VerticalAlignment="Center" Margin="4,0,0,0" />
               </StackPanel>

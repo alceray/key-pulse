@@ -22,6 +22,7 @@ public sealed class DashboardViewModel : ObservableObject, IDisposable
     private readonly UsbMonitorService _usbMonitorService;
     private readonly AppTimerService _appTimerService;
     private readonly RawInputService _rawInputService;
+    private readonly ThemeService _themeService;
 
     public ICommand RefreshCommand { get; }
 
@@ -201,7 +202,8 @@ public sealed class DashboardViewModel : ObservableObject, IDisposable
         DailyStatsService dailyStatsService,
         UsbMonitorService usbMonitorService,
         AppTimerService appTimerService,
-        RawInputService rawInputService
+        RawInputService rawInputService,
+        ThemeService themeService
     )
     {
         _dataService = dataService;
@@ -209,6 +211,8 @@ public sealed class DashboardViewModel : ObservableObject, IDisposable
         _usbMonitorService = usbMonitorService;
         _appTimerService = appTimerService;
         _rawInputService = rawInputService;
+        _themeService = themeService;
+        _themeService.ThemeChanged += OnThemeChanged;
         PieHoverController = DashboardPieChartBuilder.BuildPieHoverController(HandlePlotClick);
         ActivityChartController = DashboardActivityChartBuilder.BuildActivityChartController(HandlePlotClick);
         _hoverPreview.PropertyChanged += HoverPreview_PropertyChanged;
@@ -443,6 +447,7 @@ public sealed class DashboardViewModel : ObservableObject, IDisposable
             MousePiePlot = mouseModel;
             var resetActivityView = Interlocked.Exchange(ref _pendingActivityViewReset, 0) == 1;
             DashboardActivityChartBuilder.ApplyInputActivityPlot(_inputActivityPlot, activityData, resetActivityView);
+            ApplyPlotThemes();
             LastUpdatedText = lastUpdated;
         });
     }
@@ -498,6 +503,20 @@ public sealed class DashboardViewModel : ObservableObject, IDisposable
         KeyboardPiePlot = keyboardModel;
         MousePiePlot = mouseModel;
         DashboardActivityChartBuilder.ApplyInputActivityPlot(_inputActivityPlot, activityData, resetView: false);
+        ApplyPlotThemes();
+    }
+
+    private void ApplyPlotThemes()
+    {
+        DashboardPlotTheme.Apply(_keyboardPiePlot);
+        DashboardPlotTheme.Apply(_mousePiePlot);
+        DashboardPlotTheme.Apply(_inputActivityPlot);
+    }
+
+    private void OnThemeChanged()
+    {
+        RenderModelsFromCache();
+        _hoverPreview.RefreshTheme();
     }
 
     /// <summary>Builds the keyboard pie, mouse pie, and activity render data for a given selection state.</summary>
@@ -563,6 +582,7 @@ public sealed class DashboardViewModel : ObservableObject, IDisposable
     /// </summary>
     public void Dispose()
     {
+        _themeService.ThemeChanged -= OnThemeChanged;
         _appTimerService.ThirtySecondTick -= OnRefreshTick;
         _hoverPreview.PropertyChanged -= HoverPreview_PropertyChanged;
         _rawInputService.PauseStateChanged -= OnPauseStateChanged;

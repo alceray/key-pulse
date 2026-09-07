@@ -12,6 +12,7 @@ public class AppUserSettingsTests
 
         settings.IsFirstLaunch.ShouldBeTrue();
         settings.AutoInstallUpdates.ShouldBeTrue();
+        settings.DarkMode.ShouldBeFalse();
         settings.CloseToTray.ShouldBeTrue();
         settings.SuppressCloseToTrayHint.ShouldBeFalse(); // reminder shows until the user opts out
         settings.ActivityRetentionMonths.ShouldBe(24); // bounded by default; 0 would keep forever
@@ -44,6 +45,7 @@ public class AppUserSettingsTests
         settings.IsFirstLaunch.ShouldBeFalse();
         settings.AutoInstallUpdates.ShouldBeFalse();
         settings.ActivityRetentionMonths.ShouldBe(24);
+        settings.DarkMode.ShouldBeFalse();
     }
 
     [Fact]
@@ -65,6 +67,7 @@ public class AppUserSettingsTests
             LaunchOnLogin = true,
             IsFirstLaunch = false,
             AutoInstallUpdates = false,
+            DarkMode = true,
             CloseToTray = false,
             SuppressCloseToTrayHint = true,
             ActivityRetentionMonths = 6,
@@ -87,6 +90,7 @@ public class AppUserSettingsTests
         roundTripped.LaunchOnLogin.ShouldBeTrue();
         roundTripped.IsFirstLaunch.ShouldBeFalse();
         roundTripped.AutoInstallUpdates.ShouldBeFalse();
+        roundTripped.DarkMode.ShouldBeTrue();
         roundTripped.CloseToTray.ShouldBeFalse();
         roundTripped.SuppressCloseToTrayHint.ShouldBeTrue();
         roundTripped.ActivityRetentionMonths.ShouldBe(6);

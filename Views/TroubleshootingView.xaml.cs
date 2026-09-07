@@ -226,10 +226,10 @@ public partial class TroubleshootingView
         foreach (var entry in entries)
         {
             if (entry.IsAppSessionStart && !first)
-                EmitRuns(paragraph, "\n" + dividerLine, AppColorPalette.MutedBrush, searchQuery);
+                EmitRuns(paragraph, "\n" + dividerLine, nameof(AppColorPalette.MutedBrush), searchQuery);
 
             if (!first)
-                EmitRuns(paragraph, "\n", AppColorPalette.PrimaryTextBrush, searchQuery);
+                EmitRuns(paragraph, "\n", nameof(AppColorPalette.PrimaryTextBrush), searchQuery);
 
             EmitTokenColoredRuns(paragraph, entry.Text, searchQuery);
             first = false;
@@ -259,27 +259,32 @@ public partial class TroubleshootingView
         foreach (Match match in LevelTokenRegex.Matches(text))
         {
             if (match.Index > cursor)
-                EmitRuns(paragraph, text[cursor..match.Index], AppColorPalette.PrimaryTextBrush, searchQuery);
+                EmitRuns(paragraph, text[cursor..match.Index], nameof(AppColorPalette.PrimaryTextBrush), searchQuery);
 
-            EmitRuns(paragraph, match.Value, AppColorPalette.GetLogTokenBrush(match.Value), searchQuery);
+            EmitRuns(paragraph, match.Value, AppColorPalette.GetLogTokenResourceKey(match.Value), searchQuery);
             cursor = match.Index + match.Length;
         }
 
         if (cursor < text.Length)
-            EmitRuns(paragraph, text[cursor..], AppColorPalette.PrimaryTextBrush, searchQuery);
+            EmitRuns(paragraph, text[cursor..], nameof(AppColorPalette.PrimaryTextBrush), searchQuery);
+    }
+
+    private static Run CreateThemedRun(string text, string foregroundKey)
+    {
+        var run = new Run(text);
+        run.SetResourceReference(TextElement.ForegroundProperty, foregroundKey);
+        return run;
     }
 
     /// <summary>
-    /// Appends <paramref name="text"/> to <paramref name="paragraph"/> as one or more
-    /// <see cref="Run"/> elements.  When <paramref name="searchQuery"/> is non-empty,
-    /// matching segments receive a yellow background and are registered in
-    /// <see cref="_matchRuns"/> (in document order, matching <see cref="_matchRanges"/>).
+    /// Appends themed runs, recording search matches in document order. Dynamic resources let an
+    /// existing document change theme without losing its selection, scroll position, or current match.
     /// </summary>
-    private void EmitRuns(Paragraph paragraph, string text, Brush baseBrush, string searchQuery)
+    private void EmitRuns(Paragraph paragraph, string text, string foregroundKey, string searchQuery)
     {
         if (string.IsNullOrEmpty(searchQuery))
         {
-            paragraph.Inlines.Add(new Run(text) { Foreground = baseBrush });
+            paragraph.Inlines.Add(CreateThemedRun(text, foregroundKey));
             return;
         }
 
@@ -289,18 +294,15 @@ public partial class TroubleshootingView
             var match = text.IndexOf(searchQuery, local, StringComparison.OrdinalIgnoreCase);
             if (match < 0)
             {
-                paragraph.Inlines.Add(new Run(text[local..]) { Foreground = baseBrush });
+                paragraph.Inlines.Add(CreateThemedRun(text[local..], foregroundKey));
                 break;
             }
 
             if (match > local)
-                paragraph.Inlines.Add(new Run(text[local..match]) { Foreground = baseBrush });
+                paragraph.Inlines.Add(CreateThemedRun(text[local..match], foregroundKey));
 
-            var matchRun = new Run(text.Substring(match, searchQuery.Length))
-            {
-                Foreground = baseBrush,
-                Background = AppColorPalette.SearchHighlightBrush,
-            };
+            var matchRun = CreateThemedRun(text.Substring(match, searchQuery.Length), "SearchHighlightTextBrush");
+            matchRun.SetResourceReference(TextElement.BackgroundProperty, nameof(AppColorPalette.SearchHighlightBrush));
             paragraph.Inlines.Add(matchRun);
             _matchRuns.Add(matchRun);
 
@@ -340,10 +342,13 @@ public partial class TroubleshootingView
     private void UpdateActiveMatchHighlight()
     {
         for (var i = 0; i < _matchRuns.Count; i++)
-            _matchRuns[i].Background =
-                i == _currentMatchIndex
-                    ? AppColorPalette.SearchHighlightActiveBrush
-                    : AppColorPalette.SearchHighlightBrush;
+            _matchRuns[i]
+                .SetResourceReference(
+                    TextElement.BackgroundProperty,
+                    i == _currentMatchIndex
+                        ? nameof(AppColorPalette.SearchHighlightActiveBrush)
+                        : nameof(AppColorPalette.SearchHighlightBrush)
+                );
     }
 
     private void UpdateSearchCounter()

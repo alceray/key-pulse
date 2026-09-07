@@ -18,6 +18,7 @@ public class SettingsViewModel : ToastMessageViewModelBase
     private bool _launchOnLogin;
     private bool _autoInstallUpdates;
     private bool _closeToTray;
+    private bool _darkMode;
     private RetentionOption _selectedRetentionOption = RetentionOptions.All[0];
     private bool _isCheckingUpdates;
     private bool _isUpdateAvailable;
@@ -88,6 +89,20 @@ public class SettingsViewModel : ToastMessageViewModelBase
 
             if (!_suppressAutoSave)
                 SaveSettings(nameof(AppUserSettings.AutoInstallUpdates), value);
+        }
+    }
+
+    public bool DarkMode
+    {
+        get => _darkMode;
+        set
+        {
+            if (_darkMode == value)
+                return;
+            _darkMode = value;
+            OnPropertyChanged();
+            if (!_suppressAutoSave)
+                SaveSettings(nameof(AppUserSettings.DarkMode), value);
         }
     }
 
@@ -342,6 +357,7 @@ public class SettingsViewModel : ToastMessageViewModelBase
             LaunchOnLogin = settings.LaunchOnLogin;
             AutoInstallUpdates = settings.AutoInstallUpdates;
             CloseToTray = settings.CloseToTray;
+            DarkMode = settings.DarkMode;
             SelectedRetentionOption = RetentionOptions.FromMonths(settings.ActivityRetentionMonths);
             LoadDatabaseSettings(settings);
 
@@ -502,14 +518,18 @@ public class SettingsViewModel : ToastMessageViewModelBase
             settings.LaunchOnLogin = LaunchOnLogin;
             settings.AutoInstallUpdates = AutoInstallUpdates;
             settings.CloseToTray = CloseToTray;
+            settings.DarkMode = DarkMode;
             settings.ActivityRetentionMonths = SelectedRetentionOption.Months;
 
             _appSettingsService.SaveSettings(settings);
 
-            if (settings.LaunchOnLogin)
-                _startupRegistrationService.Enable();
-            else
-                _startupRegistrationService.Disable();
+            if (changedSetting == nameof(AppUserSettings.LaunchOnLogin))
+            {
+                if (settings.LaunchOnLogin)
+                    _startupRegistrationService.Enable();
+                else
+                    _startupRegistrationService.Disable();
+            }
 
             ToastMessage = "Settings saved.";
             Log.Debug("Setting updated: {Setting}={Value}", changedSetting, changedValue);
@@ -518,6 +538,11 @@ public class SettingsViewModel : ToastMessageViewModelBase
         {
             ToastMessage = "Failed to save settings. Check logs for details.";
             Log.Error(ex, "Failed to save settings");
+            if (changedSetting == nameof(AppUserSettings.DarkMode))
+            {
+                _darkMode = AppColorPalette.IsDark;
+                OnPropertyChanged(nameof(DarkMode));
+            }
         }
     }
 
@@ -529,6 +554,7 @@ public class SettingsViewModel : ToastMessageViewModelBase
             LaunchOnLogin = settings.LaunchOnLogin;
             AutoInstallUpdates = settings.AutoInstallUpdates;
             CloseToTray = settings.CloseToTray;
+            DarkMode = settings.DarkMode;
             SelectedRetentionOption = RetentionOptions.FromMonths(settings.ActivityRetentionMonths);
             LoadDatabaseSettings(settings);
         }

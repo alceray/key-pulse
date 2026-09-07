@@ -10,6 +10,9 @@ public class AppUserSettings
     public bool IsFirstLaunch { get; set; } = true;
     public bool AutoInstallUpdates { get; set; } = true;
 
+    /// <summary>Use the dark application theme. Existing installations retain the light theme.</summary>
+    public bool DarkMode { get; set; }
+
     /// <summary>When true, closing the window keeps the app running in the tray instead of exiting.</summary>
     public bool CloseToTray { get; set; } = true;
 

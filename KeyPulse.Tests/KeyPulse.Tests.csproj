@@ -23,6 +23,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\KeyPulse.csproj" />
+    <None Include="..\Views\*.xaml" Link="ThemeViewSources\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

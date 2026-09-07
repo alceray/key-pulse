@@ -5,7 +5,6 @@ using System.IO;
 using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Input;
-using System.Windows.Media;
 using KeyPulse.Configuration;
 using KeyPulse.Helpers;
 using KeyPulse.Services;
@@ -41,12 +40,7 @@ public class TroubleshootingViewModel : ToastMessageViewModelBase
 
         LogFiles = new ObservableCollection<LogFileOption>();
         LogFilters = new ObservableCollection<LogFilterItem>(
-            FilterDefinitions.Select(name => new LogFilterItem
-            {
-                Name = name,
-                IsSelected = false,
-                LevelBrush = AppColorPalette.GetLogLevelBrush(name),
-            })
+            FilterDefinitions.Select(name => new LogFilterItem { Name = name, IsSelected = false })
         );
 
         foreach (var item in LogFilters)
@@ -371,7 +365,6 @@ public class TroubleshootingViewModel : ToastMessageViewModelBase
         private int _count;
 
         public required string Name { get; init; }
-        public required Brush LevelBrush { get; init; }
 
         public bool IsSelected
         {

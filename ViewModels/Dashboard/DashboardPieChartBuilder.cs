@@ -322,9 +322,15 @@ internal sealed class DashboardHoverPreview : ObservableObject
         }
     }
 
-    /// <summary>
-    /// Copies values from the hovered pie slice into the preview state.
-    /// </summary>
+    public void RefreshTheme() =>
+        StatusBrush = StatusTag switch
+        {
+            "Connected" => AppColorPalette.ConnectedBrush,
+            "Disconnected" => AppColorPalette.DisconnectedBrush,
+            _ => AppColorPalette.MutedBrush,
+        };
+
+    /// <summary>Copies values from the hovered pie slice into the preview state.</summary>
     public void UpdateFromSlice(DashboardPieSlice slice)
     {
         DeviceName = slice.Label;
