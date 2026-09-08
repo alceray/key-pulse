@@ -91,6 +91,35 @@ public class DatabaseMigrationsTests : IDisposable
         Scalar(ctx, "SELECT EventTime FROM DeviceEvents;").ShouldBe("2026-05-20 09:00:00");
     }
 
+    [Fact]
+    public void TimestampMarkers_PreventNormalization_WithoutInventingBackfillCompletion()
+    {
+        using var ctx = _db.CreateContext();
+        ExecSql(
+            ctx,
+            """
+            INSERT INTO DeviceEvents (DeviceId, EventTime, EventType) VALUES ('D1', '2025-11-02 05:30:00', 'Connected');
+            INSERT INTO DeviceEvents (DeviceId, EventTime, EventType) VALUES ('D1', '2025-11-02 06:30:00', 'Disconnected');
+            CREATE TRIGGER no_event_delete BEFORE DELETE ON DeviceEvents BEGIN SELECT RAISE(ABORT, 'unexpected normalization'); END;
+            CREATE TRIGGER no_event_update BEFORE UPDATE ON DeviceEvents BEGIN SELECT RAISE(ABORT, 'unexpected normalization'); END;
+            """
+        );
+        using (var transaction = ctx.Database.BeginTransaction())
+        {
+            DatabaseMigrations.MarkTimestampMigrationsApplied(ctx);
+            transaction.Rollback();
+        }
+        AppMetaStore.ReadExisting(ctx).ShouldBeEmpty();
+        DatabaseMigrations.MarkTimestampMigrationsApplied(ctx);
+        DatabaseMigrations.RunAll(ctx);
+        Scalar(
+                ctx,
+                "SELECT group_concat(EventTime, '|') FROM (SELECT EventTime FROM DeviceEvents ORDER BY DeviceEventId);"
+            )
+            .ShouldBe("2025-11-02 05:30:00|2025-11-02 06:30:00");
+        AppMetaStore.ReadExisting(ctx).ContainsKey("DailyStatsFullBackfillAt").ShouldBeFalse();
+    }
+
     private static void MarkUtcMigrationDone(ApplicationDbContext ctx) =>
         ExecSql(ctx, $"INSERT INTO AppMeta (MetaKey, MetaValue) VALUES ('{UtcMigrationMarkerKey}','done');");
 

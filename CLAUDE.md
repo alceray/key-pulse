@@ -102,16 +102,17 @@ DB lives at `%AppData%\KeyPulse Signal\keypulse-data.db` (Release) or `...\Test\
 
 ## Task Management
 
-1. **Plan First**: Write the plan to its own file, `tasks/todo<TaskName>.md`, with checkable items.
+1. **Only When Requested**: Create a TODO file only when the user explicitly requests one. TODOs are
+   reserved for long tasks that need written steps. When requested, use `tasks/todo<TaskName>.md` with checkable items.
    `<TaskName>` is PascalCase and names the task, e.g. `tasks/todoProjectionWatermark.md`.
 2. **One File Per Task**: Never write to a bare `tasks/todo.md`, and never overwrite or repurpose an
    existing todo file. `tasks/` is gitignored, so an overwrite is unrecoverable from git. If a plan
    seems obsolete, archive it rather than replacing it.
-3. **Verify Plan**: Check in before starting implementation
-4. **Track Progress**: Mark items complete as you go
+3. **Verify Plan**: Follow the user's requested review process for an explicitly requested TODO.
+4. **Track Progress**: For an explicitly requested TODO, mark items complete as you go
 5. **Explain Changes**: High-level summary at each step
-6. **Document Results**: Add a review section to that task's own todo file
-7. **Archive When Done**: Move the file to `tasks/completed/`, keeping the same name
+6. **Document Results**: If the user requested a TODO, add a review section to it
+7. **Archive When Done**: Move requested TODOs to `tasks/completed/`, keeping the same name
 8. **Capture Lessons**: Update `tasks/lessons.md` after corrections
 
 ## Core Principles

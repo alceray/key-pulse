@@ -11,6 +11,7 @@ public sealed class DatabaseInstanceLock : IDisposable
 {
     private readonly object _gate = new();
     private NpgsqlConnection? _connection;
+    private string? _connectionString;
 
     public void Acquire(ApplicationDbContext context)
     {
@@ -25,24 +26,56 @@ public sealed class DatabaseInstanceLock : IDisposable
     {
         lock (_gate)
         {
-            if (_connection != null)
-                return;
+            if (_connection != null && _connectionString == connectionString)
+            {
+                try
+                {
+                    VerifyHeld();
+                    return;
+                }
+                catch
+                {
+                    // A new preflight attempt may reconnect. Verification during a transfer still
+                    // fails without reacquiring, so losing the lock cannot commit an unprotected copy.
+                    Dispose();
+                }
+            }
 
-            var connection = new NpgsqlConnection(connectionString);
-            connection.Open();
-            using var command = connection.CreateCommand();
-            command.CommandText = "SELECT pg_try_advisory_lock(@lock_key);";
-            command.Parameters.AddWithValue("lock_key", AppConstants.App.PostgreSqlAdvisoryLockKey);
-            if (command.ExecuteScalar() is not true)
+            Dispose();
+            var options = new NpgsqlConnectionStringBuilder(connectionString) { Pooling = false };
+            var connection = new NpgsqlConnection(options.ConnectionString);
+            try
+            {
+                connection.Open();
+                using var command = connection.CreateCommand();
+                command.CommandText = "SELECT pg_try_advisory_lock(@lock_key);";
+                command.Parameters.AddWithValue("lock_key", AppConstants.App.PostgreSqlAdvisoryLockKey);
+                if (command.ExecuteScalar() is not true)
+                    throw new InvalidOperationException(
+                        "This PostgreSQL database is already in use by another KeyPulse process"
+                    );
+            }
+            catch
             {
                 connection.Dispose();
-                throw new InvalidOperationException(
-                    "This PostgreSQL database is already in use by another KeyPulse process"
-                );
+                throw;
             }
 
             _connection = connection;
-            Log.Debug("Exclusive PostgreSQL database lock acquired");
+            _connectionString = connectionString;
+            Log.Debug("PostgreSQL lock acquired for single-instance access");
+        }
+    }
+
+    internal void VerifyHeld()
+    {
+        lock (_gate)
+        {
+            if (_connection == null)
+                throw new InvalidOperationException("Exclusive database access is no longer available");
+            using var command = _connection.CreateCommand();
+            command.CommandText = "SELECT 1;";
+            command.ExecuteScalar();
         }
     }
 
@@ -55,8 +88,6 @@ public sealed class DatabaseInstanceLock : IDisposable
 
             try
             {
-                // Closing the connection returns it to the pool, where its reset is deferred and the lock
-                // would survive. Releasing it here frees the database for the next writer straight away.
                 using var command = _connection.CreateCommand();
                 command.CommandText = "SELECT pg_advisory_unlock(@lock_key);";
                 command.Parameters.AddWithValue("lock_key", AppConstants.App.PostgreSqlAdvisoryLockKey);
@@ -64,12 +95,13 @@ public sealed class DatabaseInstanceLock : IDisposable
             }
             catch (Exception ex)
             {
-                Log.Warning(ex, "Failed to release the exclusive database lock");
+                Log.Warning(ex, "Failed to release the PostgreSQL instance lock");
             }
             finally
             {
                 _connection.Dispose();
                 _connection = null;
+                _connectionString = null;
             }
         }
     }

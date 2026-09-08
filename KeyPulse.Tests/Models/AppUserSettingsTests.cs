@@ -18,6 +18,7 @@ public class AppUserSettingsTests
         settings.ActivityRetentionMonths.ShouldBe(24); // bounded by default; 0 would keep forever
         settings.DatabaseProvider.ShouldBe(DatabaseProvider.Sqlite);
         settings.PendingDatabaseProvider.ShouldBeNull();
+        settings.PendingDatabaseReplace.ShouldBeFalse();
         settings.PostgreSql.Port.ShouldBe(5432);
 #if DEBUG
         settings.PostgreSql.Database.ShouldBe("keypulse_signal_test");
@@ -74,6 +75,7 @@ public class AppUserSettingsTests
             DatabaseProvider = DatabaseProvider.PostgreSql,
             PendingDatabaseProvider = DatabaseProvider.Sqlite,
             PendingDatabaseImport = true,
+            PendingDatabaseReplace = true,
             PendingDatabaseSwitchId = "switch-123",
             PostgreSql = new PostgreSqlConnectionSettings
             {
@@ -97,6 +99,7 @@ public class AppUserSettingsTests
         roundTripped.DatabaseProvider.ShouldBe(DatabaseProvider.PostgreSql);
         roundTripped.PendingDatabaseProvider.ShouldBe(DatabaseProvider.Sqlite);
         roundTripped.PendingDatabaseImport.ShouldBeTrue();
+        roundTripped.PendingDatabaseReplace.ShouldBeTrue();
         roundTripped.PendingDatabaseSwitchId.ShouldBe("switch-123");
         roundTripped.PostgreSql.Host.ShouldBe("db.local");
         roundTripped.PostgreSql.Port.ShouldBe(5544);

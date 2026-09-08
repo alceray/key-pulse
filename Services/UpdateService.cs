@@ -127,12 +127,10 @@ public class UpdateService : IDisposable
                 Log.Information("Update check recovered after transient network failure");
             }
 
-            Log.Debug(
-                "Update check result: Current=v{Current}, Latest=v{Latest}, UpdateAvailable={Available}",
-                CurrentVersion,
-                latestVersion,
-                updateAvailable
-            );
+            if (updateAvailable)
+                Log.Debug("Update available from v{Current:l} to v{Latest:l}", CurrentVersion, latestVersion);
+            else
+                Log.Debug("No update available for v{Current:l}", CurrentVersion);
 
             if (shouldNotify)
             {

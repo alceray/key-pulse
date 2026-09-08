@@ -29,12 +29,29 @@ public class AppUserSettings
     /// <summary>Non-secret PostgreSQL connection settings. The password is stored in Windows Credential Manager.</summary>
     public PostgreSqlConnectionSettings PostgreSql { get; set; } = new();
 
+    public string? PostgreSqlCredentialReference { get; set; }
+    public PostgreSqlConnectionSettings? PendingPostgreSql { get; set; }
+    public string? PendingPostgreSqlCredentialReference { get; set; }
+
     /// <summary>A provider switch that will be completed before monitoring starts on the next launch.</summary>
     public DatabaseProvider? PendingDatabaseProvider { get; set; }
 
-    /// <summary>Whether a pending SQLite-to-PostgreSQL switch must copy the current installation's history.</summary>
+    /// <summary>Whether the pending provider switch must copy the active database's history.</summary>
     public bool PendingDatabaseImport { get; set; }
+
+    /// <summary>Whether replacement of existing PostgreSQL history was explicitly confirmed.</summary>
+    public bool PendingDatabaseReplace { get; set; }
 
     /// <summary>Correlates a committed import with activation if settings persistence is interrupted.</summary>
     public string? PendingDatabaseSwitchId { get; set; }
+
+    public void ClearPendingDatabaseSwitch()
+    {
+        PendingDatabaseProvider = null;
+        PendingDatabaseImport = false;
+        PendingDatabaseReplace = false;
+        PendingDatabaseSwitchId = null;
+        PendingPostgreSql = null;
+        PendingPostgreSqlCredentialReference = null;
+    }
 }

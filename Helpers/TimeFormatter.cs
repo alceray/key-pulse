@@ -152,7 +152,7 @@ public static class TimeFormatter
     /// </summary>
     public static DateTime TruncateToMinute(this DateTime dt)
     {
-        return new DateTime(dt.Year, dt.Month, dt.Day, dt.Hour, dt.Minute, 0, dt.Kind);
+        return dt.AddTicks(-(dt.Ticks % TimeSpan.TicksPerMinute));
     }
 
     /// <summary>
@@ -162,7 +162,8 @@ public static class TimeFormatter
     /// </summary>
     public static DateTime TruncateToSecond(this DateTime dt)
     {
-        return new DateTime(dt.Year, dt.Month, dt.Day, dt.Hour, dt.Minute, dt.Second, dt.Kind);
+        // Reconstructing a local clock time loses which occurrence of a repeated daylight-saving hour it represents.
+        return dt.AddTicks(-(dt.Ticks % TimeSpan.TicksPerSecond));
     }
 
     /// <summary>

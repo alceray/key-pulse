@@ -1,6 +1,7 @@
 ﻿using KeyPulse.Configuration;
 using KeyPulse.Models;
 using KeyPulse.Services;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 
 namespace KeyPulse.Data;
@@ -16,7 +17,10 @@ public sealed class ConfiguredDbContextFactory : IDbContextFactory<ApplicationDb
         var settings = settingsService.GetSettings();
         _provider = settings.DatabaseProvider;
         _postgreSql = settings.PostgreSql.Copy();
-        _password = _provider == DatabaseProvider.PostgreSql ? credentialStore.ReadPostgreSqlPassword() : null;
+        _password =
+            _provider == DatabaseProvider.PostgreSql
+                ? credentialStore.ReadPostgreSqlPassword(settings.PostgreSqlCredentialReference)
+                : null;
     }
 
     public ApplicationDbContext CreateDbContext()
@@ -33,10 +37,23 @@ public sealed class ConfiguredDbContextFactory : IDbContextFactory<ApplicationDb
         return CreateSqliteContext(AppDataPaths.GetPath(AppConstants.Paths.DatabaseFileName));
     }
 
-    internal static ApplicationDbContext CreateSqliteContext(string databasePath)
+    internal static ApplicationDbContext CreateSqliteContext(
+        string databasePath,
+        SqliteOpenMode mode = SqliteOpenMode.ReadWriteCreate,
+        bool pooling = true
+    )
     {
         var builder = new DbContextOptionsBuilder<ApplicationDbContext>();
-        builder.UseLazyLoadingProxies().UseSqlite($"Data Source={databasePath}");
+        builder
+            .UseLazyLoadingProxies()
+            .UseSqlite(
+                new SqliteConnectionStringBuilder
+                {
+                    DataSource = databasePath,
+                    Mode = mode,
+                    Pooling = pooling,
+                }.ConnectionString
+            );
         return new ApplicationDbContext(builder.Options);
     }
 

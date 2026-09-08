@@ -61,12 +61,28 @@ internal static class AppMetaStore
     public static IReadOnlyDictionary<string, string> ReadAll(ApplicationDbContext ctx)
     {
         EnsureTable(ctx);
+        return ReadExisting(ctx);
+    }
+
+    public static IReadOnlyDictionary<string, string> ReadExisting(ApplicationDbContext ctx)
+    {
         using var command = CreateCommand(ctx, "SELECT MetaKey, MetaValue FROM AppMeta;");
         using var reader = command.ExecuteReader();
         var values = new Dictionary<string, string>(StringComparer.Ordinal);
         while (reader.Read())
             values[reader.GetString(0)] = reader.GetString(1);
         return values;
+    }
+
+    public static bool TableExists(ApplicationDbContext ctx)
+    {
+        using var command = CreateCommand(
+            ctx,
+            ctx.Database.IsSqlite()
+                ? "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'AppMeta';"
+                : "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'appmeta';"
+        );
+        return Convert.ToInt64(command.ExecuteScalar()) != 0;
     }
 
     public static void Write(ApplicationDbContext ctx, string key, string value)

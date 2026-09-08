@@ -93,10 +93,17 @@
 
         <Border Style="{StaticResource SectionCardStyle}">
           <StackPanel>
-            <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-              <iconPacks:PackIconPhosphorIcons Kind="Database" Width="16" Height="16" VerticalAlignment="Center" Foreground="{DynamicResource PrimaryTextBrush}" />
-              <TextBlock Text="Storage" Style="{StaticResource SectionTitleStyle}" />
-            </StackPanel>
+            <DockPanel Margin="0,0,0,8">
+              <local:InfoHint
+                DockPanel.Dock="Right"
+                VerticalAlignment="Center"
+                Text="SQLite stores data locally with no setup. PostgreSQL requires your own database. Save and restart to switch databases and copy your data over."
+              />
+              <StackPanel Orientation="Horizontal">
+                <iconPacks:PackIconPhosphorIcons Kind="Database" Width="16" Height="16" VerticalAlignment="Center" Foreground="{DynamicResource PrimaryTextBrush}" />
+                <TextBlock Text="Storage" Style="{StaticResource SectionTitleStyle}" />
+              </StackPanel>
+            </DockPanel>
             <Border Style="{StaticResource SectionDividerStyle}" />
 
             <Grid>
@@ -107,6 +114,7 @@
               <RadioButton
                 Grid.Column="0"
                 GroupName="StorageProvider"
+                IsEnabled="{Binding CanEditConnectionTarget}"
                 Style="{StaticResource StorageOptionStyle}"
                 IsChecked="{Binding UseSqliteStorage, Mode=TwoWay}"
               >
@@ -126,6 +134,7 @@
               <RadioButton
                 Grid.Column="1"
                 GroupName="StorageProvider"
+                IsEnabled="{Binding CanEditConnectionTarget}"
                 Style="{StaticResource StorageOptionStyle}"
                 Margin="0"
                 IsChecked="{Binding UsePostgreSqlStorage, Mode=TwoWay}"
@@ -168,7 +177,7 @@
 
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                   <Button Content="Test" Command="{Binding TestDatabaseConnectionCommand}" Padding="10,3" Margin="8,0,0,0" />
-                  <Button Content="Edit" Padding="10,3" Margin="8,0,0,0" Click="OnEditDatabaseConnectionClick" />
+                  <Button Content="Edit" IsEnabled="{Binding CanEditConnectionTarget}" Padding="10,3" Margin="8,0,0,0" Click="OnEditDatabaseConnectionClick" />
                 </StackPanel>
               </Grid>
 
@@ -176,15 +185,6 @@
                 Visibility="{Binding ShowPostgreSqlForm, Converter={StaticResource BoolToVisibility}}"
                 Margin="0,12,0,0"
               >
-                <TextBlock
-                  Text="Host, port, and database stay fixed while PostgreSQL is in use. Switch to SQLite first to point KeyPulse at a different database."
-                  Visibility="{Binding IsPostgreSqlActive, Converter={StaticResource BoolToVisibility}}"
-                  Foreground="{DynamicResource MutedBrush}"
-                  FontSize="11"
-                  TextWrapping="Wrap"
-                  Margin="0,0,0,10"
-                />
-
                 <Grid>
                   <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="90" />
@@ -193,7 +193,6 @@
                     <ColumnDefinition Width="70" />
                   </Grid.ColumnDefinitions>
                   <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
@@ -215,31 +214,26 @@
                   <TextBlock Grid.Row="3" Grid.Column="0" Text="Password" VerticalAlignment="Center" Margin="0,0,6,6" />
                   <PasswordBox x:Name="PostgreSqlPasswordBox" Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="3" PasswordChanged="OnPostgreSqlPasswordChanged" Margin="0,0,0,6" />
 
-                  <TextBlock
-                    Grid.Row="4"
-                    Grid.Column="1"
-                    Grid.ColumnSpan="3"
-                    Text="Leave blank to keep the saved password."
-                    Visibility="{Binding IsPostgreSqlActive, Converter={StaticResource BoolToVisibility}}"
-                    Foreground="{DynamicResource MutedBrush}"
-                    FontSize="11"
-                    Margin="0,0,0,8"
-                  />
-
-                  <TextBlock Grid.Row="5" Grid.Column="0" Text="SSL mode" VerticalAlignment="Center" Margin="0,0,6,0" />
-                  <ComboBox Grid.Row="5" Grid.Column="1" Width="120" HorizontalAlignment="Left" ItemsSource="{Binding PostgreSqlSslModeChoices}" SelectedItem="{Binding PostgreSqlSslMode}" />
-                  <Button Grid.Row="5" Grid.Column="2" Grid.ColumnSpan="2" Content="Test" Command="{Binding TestDatabaseConnectionCommand}" Padding="10,3" HorizontalAlignment="Right" />
+                  <TextBlock Grid.Row="4" Grid.Column="0" Text="SSL mode" VerticalAlignment="Center" Margin="0,0,6,0" />
+                  <ComboBox Grid.Row="4" Grid.Column="1" Width="120" HorizontalAlignment="Left" ItemsSource="{Binding PostgreSqlSslModeChoices}" SelectedItem="{Binding PostgreSqlSslMode}" />
+                  <Button Grid.Row="4" Grid.Column="2" Grid.ColumnSpan="2" Content="Test" Command="{Binding TestDatabaseConnectionCommand}" Padding="10,3" HorizontalAlignment="Right" />
                 </Grid>
               </StackPanel>
 
+              <TextBlock
+                Text="{Binding PendingDatabaseSummary}"
+                Visibility="{Binding HasPendingDatabaseChange, Converter={StaticResource BoolToVisibility}}"
+                TextWrapping="Wrap"
+                Margin="0,10,0,0"
+              />
               <StackPanel
                 Orientation="Horizontal"
                 Margin="0,12,0,0"
                 Visibility="{Binding ShowDatabaseActions, Converter={StaticResource BoolToVisibility}}"
               >
                 <Button
-                  Content="Apply on restart"
-                  Command="{Binding ApplyDatabaseCommand}"
+                  Content="Save and restart"
+                  Command="{Binding SaveAndRestartDatabaseCommand}"
                   Padding="12,4"
                   Margin="0,0,8,0"
                 />

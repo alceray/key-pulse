@@ -1,4 +1,4 @@
-﻿<Window
+<Window
   x:Class="KeyPulse.Views.DatabaseSetupWindow"
   Style="{StaticResource AppWindowStyle}"
   xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -10,6 +10,7 @@
 >
   <Grid Margin="24">
     <Grid.RowDefinitions>
+      <RowDefinition Height="Auto" />
       <RowDefinition Height="Auto" />
       <RowDefinition Height="Auto" />
       <RowDefinition Height="Auto" />
@@ -28,6 +29,10 @@
     </StackPanel>
 
     <StackPanel Grid.Row="1" Margin="0,0,0,14">
+      <StackPanel x:Name="RecoveryConnectionPanel" Visibility="Collapsed" Margin="0,0,0,12">
+        <TextBlock Text="Connection to correct" Margin="0,0,0,4" />
+        <ComboBox x:Name="RecoveryConnectionComboBox" SelectionChanged="OnRecoveryConnectionChanged" />
+      </StackPanel>
       <RadioButton x:Name="SqliteRadio" Content="SQLite (recommended)" IsChecked="True" Checked="OnProviderChanged" />
       <TextBlock Margin="24,3,0,10" Text="Private local file, no setup required." Foreground="{DynamicResource SecondaryTextBrush}" />
       <RadioButton x:Name="PostgreSqlRadio" Content="PostgreSQL" Checked="OnProviderChanged" />
@@ -79,7 +84,27 @@
 
     <TextBlock x:Name="StatusText" Grid.Row="3" Margin="0,0,0,14" TextWrapping="Wrap" Foreground="{DynamicResource SecondaryTextBrush}" />
 
-    <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right">
+    <StackPanel Grid.Row="4" Margin="0,0,0,14">
+      <Button
+        x:Name="CancelChangeButton"
+        Content="Cancel pending change"
+        Visibility="Collapsed"
+        HorizontalAlignment="Left"
+        Padding="10,4"
+        Margin="0,0,0,6"
+        Click="OnCancelChangeClick"
+      />
+      <Button
+        x:Name="UseLocalButton"
+        Content="Use local without copying"
+        Visibility="Collapsed"
+        HorizontalAlignment="Left"
+        Padding="10,4"
+        Click="OnUseLocalClick"
+      />
+    </StackPanel>
+
+    <StackPanel Grid.Row="5" Orientation="Horizontal" HorizontalAlignment="Right">
       <Button Content="Exit" Width="82" Margin="0,0,8,0" IsCancel="True" />
       <Button x:Name="ContinueButton" Content="Continue" Width="100" IsDefault="True" Click="OnContinueClick" />
     </StackPanel>

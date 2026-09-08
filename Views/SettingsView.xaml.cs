@@ -1,4 +1,5 @@
-﻿using KeyPulse.ViewModels;
+using System.ComponentModel;
+using KeyPulse.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace KeyPulse.Views;
@@ -8,7 +9,23 @@ public partial class SettingsView
     public SettingsView()
     {
         InitializeComponent();
-        DataContext = App.ServiceProvider.GetRequiredService<SettingsViewModel>();
+        var viewModel = App.ServiceProvider.GetRequiredService<SettingsViewModel>();
+        DataContext = viewModel;
+        PropertyChangedEventManager.AddHandler(
+            viewModel,
+            OnViewModelPasswordChanged,
+            nameof(SettingsViewModel.PostgreSqlPassword)
+        );
+        PostgreSqlPasswordBox.Password = viewModel.PostgreSqlPassword;
+    }
+
+    private void OnViewModelPasswordChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (
+            DataContext is SettingsViewModel viewModel
+            && PostgreSqlPasswordBox.Password != viewModel.PostgreSqlPassword
+        )
+            PostgreSqlPasswordBox.Password = viewModel.PostgreSqlPassword;
     }
 
     private void OnPostgreSqlPasswordChanged(object sender, System.Windows.RoutedEventArgs e)
@@ -22,15 +39,12 @@ public partial class SettingsView
         if (DataContext is not SettingsViewModel viewModel)
             return;
         viewModel.BeginEditConnection();
-        // A password box cannot be bound, so clearing it is done by hand.
-        PostgreSqlPasswordBox.Clear();
     }
 
-    private void OnCancelDatabaseChangesClick(object sender, System.Windows.RoutedEventArgs e)
+    private async void OnCancelDatabaseChangesClick(object sender, System.Windows.RoutedEventArgs e)
     {
         if (DataContext is not SettingsViewModel viewModel)
             return;
-        viewModel.CancelDatabaseChanges();
-        PostgreSqlPasswordBox.Clear();
+        await viewModel.CancelDatabaseChangesAsync();
     }
 }

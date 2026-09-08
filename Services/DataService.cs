@@ -74,6 +74,7 @@ public class DataService
             {
                 DatabaseMigrations.RunAll(ctx);
                 ctx.Database.ExecuteSqlRaw("PRAGMA journal_mode=WAL;");
+                SqliteHistoryFile.PruneBackups(ctx.Database.GetDbConnection().DataSource);
             }
             stopwatch.Stop();
             Log.Information("Database initialization completed in {ElapsedMs}ms", stopwatch.ElapsedMilliseconds);
