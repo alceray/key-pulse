@@ -4,6 +4,8 @@ using System.Runtime.ExceptionServices;
 using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Threading;
+using KeyPulse.Services;
+using KeyPulse.Views;
 
 namespace KeyPulse.Tests;
 
@@ -60,6 +62,14 @@ public class StartupLifecycleTests
             try
             {
                 var app = new StartupTestApp();
+                app.Resources.MergedDictionaries.Add(new KeyPulse.Configuration.ThemeResources());
+                foreach (var file in new[] { "ThemeControls.xaml", "AppStyles.xaml" })
+                    app.Resources.MergedDictionaries.Add(
+                        new ResourceDictionary
+                        {
+                            Source = new Uri($"/KeyPulse Signal;component/Views/Styles/{file}", UriKind.Relative),
+                        }
+                    );
                 app.ExerciseStartup = async () =>
                 {
                     // Canceling setup can exit before the service provider has been constructed.
@@ -79,6 +89,32 @@ public class StartupLifecycleTests
                         await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
                         app.Dispatcher.HasShutdownStarted.ShouldBeFalse();
                     }
+
+                    var transfer = new DatabaseTransferWindow("Transfer test")
+                    {
+                        ShowInTaskbar = false,
+                        ShowActivated = false,
+                        WindowStartupLocation = WindowStartupLocation.Manual,
+                        Left = -10000,
+                        Top = -10000,
+                    };
+                    var cancellations = 0;
+                    transfer.CancelRequested += () => cancellations++;
+                    transfer.SetStage(DatabaseTransferStage.Copying);
+                    transfer.IsVisible.ShouldBeTrue();
+                    transfer.SetStage(DatabaseTransferStage.Idle);
+                    transfer.IsVisible.ShouldBeFalse();
+                    transfer.SetStage(DatabaseTransferStage.Verifying);
+                    transfer.IsVisible.ShouldBeTrue();
+                    transfer.Close();
+                    transfer.Close();
+                    cancellations.ShouldBe(1);
+                    transfer.IsVisible.ShouldBeTrue("Cancellation must wait for the transfer to unwind");
+                    transfer.Complete();
+                    transfer.SetStage(DatabaseTransferStage.Copying);
+                    transfer.IsVisible.ShouldBeFalse();
+                    await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
+                    app.Dispatcher.HasShutdownStarted.ShouldBeFalse();
 
                     resumed = true;
                     var main = new Window { ShowInTaskbar = false, ShowActivated = false };

@@ -1,4 +1,5 @@
 using System.IO;
+using System.Text.RegularExpressions;
 using KeyPulse.Configuration;
 using Microsoft.Data.Sqlite;
 using Serilog;
@@ -66,15 +67,7 @@ internal static class SqliteHistoryFile
 
     internal static string CreateVerifiedBackup(string databasePath)
     {
-        var directory = Path.Combine(
-            Path.GetDirectoryName(databasePath)!,
-            AppConstants.Paths.DatabaseBackupsDirectoryName
-        );
-        Directory.CreateDirectory(directory);
-        var backupPath = Path.Combine(
-            directory,
-            $"{Path.GetFileNameWithoutExtension(databasePath)}-{DateTime.Now:yyyyMMdd-HHmmss}-{Guid.NewGuid():N}.pre-import.db"
-        );
+        var backupPath = ReserveBackupFile(databasePath, DateTime.Now);
 
         using (var source = Open(databasePath))
         {
@@ -111,8 +104,70 @@ internal static class SqliteHistoryFile
             snapshot.Commit();
         }
         PrepareStandalone(backupPath);
-        Log.Information("Local database backup verified at {BackupPath}", backupPath);
+        Log.Debug("Local database backup verified at {BackupPath}", backupPath);
         return backupPath;
+    }
+
+    internal static string ReserveBackupFile(string databasePath, DateTime timestamp)
+    {
+        var directory = Path.Combine(
+            Path.GetDirectoryName(databasePath)!,
+            AppConstants.Paths.DatabaseBackupsDirectoryName
+        );
+        Directory.CreateDirectory(directory);
+        var prefix = $"{Path.GetFileNameWithoutExtension(databasePath)}-{timestamp:yyyyMMdd-HHmmss}";
+        for (var sequence = 1; ; sequence++)
+        {
+            var suffix = sequence == 1 ? "" : $"-{sequence}";
+            var backupPath = Path.Combine(directory, $"{prefix}{suffix}.pre-import.db");
+            try
+            {
+                using var reserved = new FileStream(backupPath, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+                return backupPath;
+            }
+            catch (IOException ex) when ((ex.HResult & 0xFFFF) is 80 or 183) { }
+        }
+    }
+
+    internal static void PruneBackups(string databasePath)
+    {
+        var databaseDirectory = Path.GetDirectoryName(databasePath);
+        if (string.IsNullOrWhiteSpace(databaseDirectory))
+            return;
+        var directory = Path.Combine(databaseDirectory, AppConstants.Paths.DatabaseBackupsDirectoryName);
+        try
+        {
+            if (!Directory.Exists(directory))
+                return;
+            var pattern =
+                $@"^{Regex.Escape(Path.GetFileNameWithoutExtension(databasePath))}-[0-9]{{8}}-[0-9]{{6}}"
+                + $@"(?:-(?:[0-9]+|[a-fA-F0-9]{{32}}))?\.pre-(?:import|migration){Regex.Escape(Path.GetExtension(databasePath))}$";
+            // Migration copies retain the source's write time, so use the backup's creation time.
+            var expired = new DirectoryInfo(directory)
+                .EnumerateFiles()
+                .Where(file => Regex.IsMatch(file.Name, pattern, RegexOptions.IgnoreCase))
+                .OrderByDescending(file => file.CreationTimeUtc)
+                .ThenByDescending(file => file.Name, StringComparer.Ordinal)
+                .Skip(AppConstants.Paths.DatabaseBackupRetentionFileCountLimit)
+                .ToList();
+            foreach (var backup in expired)
+            {
+                try
+                {
+                    backup.Delete();
+                    foreach (var suffix in new[] { "-wal", "-shm", "-journal" })
+                        File.Delete(backup.FullName + suffix);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    Log.Warning(ex, "Old database backup could not be removed at {BackupPath}", backup.FullName);
+                }
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Log.Warning(ex, "Database backup cleanup could not finish in {BackupDirectory}", directory);
+        }
     }
 
     private static void VerifyTable(SqliteCommand command, string table)

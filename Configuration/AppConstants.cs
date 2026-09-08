@@ -28,6 +28,7 @@ public static class AppConstants
         public const string SettingsFileName = "settings.json";
         public const string DatabaseFileName = "keypulse-data.db";
         public const string DatabaseBackupsDirectoryName = "DbBackups";
+        public const int DatabaseBackupRetentionFileCountLimit = 3;
         public const string PreMigrationBackupSuffix = ".pre-migration";
         public const string HeartbeatFileName = "heartbeat.txt";
         public const string LogFilePattern = "*.log";

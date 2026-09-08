@@ -1,4 +1,5 @@
 using System.Data;
+using System.Diagnostics;
 using System.IO;
 using KeyPulse.Configuration;
 using KeyPulse.Data;
@@ -15,6 +16,15 @@ public enum DatabaseConnectionRole
     Destination,
 }
 
+public enum DatabaseTransferStage
+{
+    Idle,
+    Preparing,
+    Copying,
+    Verifying,
+    Activating,
+}
+
 /// <summary>Completes database changes while monitoring is stopped during application startup.</summary>
 public sealed class DatabaseSwitchService
 {
@@ -24,8 +34,9 @@ public sealed class DatabaseSwitchService
     private readonly IDatabaseCredentialStore _credentialStore;
     private readonly DatabaseInstanceLock _databaseLock;
     private readonly string _sqlitePath;
+    private readonly DatabaseConnectionSettingsService _connectionSettings;
     public DatabaseConnectionRole FailureConnection { get; private set; } = DatabaseConnectionRole.Destination;
-    private DatabaseConnectionSettingsService ConnectionSettings => new(_settingsService, _credentialStore);
+    public event Action<DatabaseTransferStage>? TransferStageChanged;
 
     public DatabaseSwitchService(
         AppSettingsService settingsService,
@@ -50,6 +61,7 @@ public sealed class DatabaseSwitchService
         _credentialStore = credentialStore;
         _databaseLock = databaseLock;
         _sqlitePath = Path.GetFullPath(sqlitePath);
+        _connectionSettings = new(settingsService, credentialStore);
     }
 
     public async Task<bool> PrepareStartupAsync(
@@ -66,6 +78,7 @@ public sealed class DatabaseSwitchService
                 try
                 {
                     await ProcessPendingSwitchAsync(cancellationToken);
+                    cancellationToken.ThrowIfCancellationRequested();
                     var current = _settingsService.GetSettings();
                     if (current.DatabaseProvider == DatabaseProvider.PostgreSql)
                     {
@@ -105,6 +118,10 @@ public sealed class DatabaseSwitchService
             _databaseLock.Dispose();
             throw;
         }
+        finally
+        {
+            ReportStage(DatabaseTransferStage.Idle);
+        }
     }
 
     private async Task<bool> ProcessPendingSwitchCoreAsync(CancellationToken cancellationToken)
@@ -112,6 +129,8 @@ public sealed class DatabaseSwitchService
         var settings = _settingsService.GetSettings();
         if (!settings.PendingDatabaseProvider.HasValue)
             return false;
+        var elapsed = Stopwatch.StartNew();
+        ReportStage(DatabaseTransferStage.Preparing);
         if (settings.PendingDatabaseReplace && !settings.PendingDatabaseImport)
             throw new InvalidOperationException("Replacing database history requires copying the active history");
 
@@ -120,8 +139,11 @@ public sealed class DatabaseSwitchService
             settings.PendingDatabaseSwitchId = Guid.NewGuid().ToString("N");
             _settingsService.SaveSettings(settings);
         }
-        if (await TryCompletePendingSwitchAsync(cancellationToken))
+        if (await IsPendingSwitchCompleteAsync(settings, cancellationToken))
+        {
+            Activate(settings, elapsed, resumed: true);
             return true;
+        }
 
         if (settings.PendingDatabaseProvider == DatabaseProvider.Sqlite)
         {
@@ -197,7 +219,8 @@ public sealed class DatabaseSwitchService
                         settings.PendingDatabaseSwitchId!,
                         settings.PendingDatabaseReplace,
                         cancellationToken,
-                        VerifyLocks
+                        VerifyLocks,
+                        ReportStage
                     );
                 else
                 {
@@ -207,7 +230,7 @@ public sealed class DatabaseSwitchService
                     await transaction.CommitAsync(cancellationToken);
                 }
                 // Keep both locks through settings publication; DI inherits the destination lock.
-                Activate(settings);
+                Activate(settings, elapsed, resumed: false);
                 return true;
             }
             finally
@@ -219,16 +242,17 @@ public sealed class DatabaseSwitchService
         else
             throw new InvalidOperationException("The pending database provider is invalid");
 
-        Activate(settings);
+        Activate(settings, elapsed, resumed: false);
         return true;
     }
 
     public async Task<bool> TryCompletePendingSwitchAsync(CancellationToken cancellationToken = default)
     {
+        var elapsed = Stopwatch.StartNew();
         var settings = _settingsService.GetSettings();
         if (!await IsPendingSwitchCompleteAsync(settings, cancellationToken))
             return false;
-        Activate(settings);
+        Activate(settings, elapsed, resumed: true);
         return true;
     }
 
@@ -238,6 +262,7 @@ public sealed class DatabaseSwitchService
         string? destinationPassword = null
     )
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (!settings.PendingDatabaseProvider.HasValue || string.IsNullOrWhiteSpace(settings.PendingDatabaseSwitchId))
             return false;
 
@@ -274,6 +299,7 @@ public sealed class DatabaseSwitchService
         CancellationToken cancellationToken = default
     )
     {
+        var elapsed = Stopwatch.StartNew();
         var settings = _settingsService.GetSettings();
         var completed = false;
         try
@@ -290,7 +316,7 @@ public sealed class DatabaseSwitchService
         }
         if (completed)
         {
-            Activate(settings);
+            Activate(settings, elapsed, resumed: true);
             return true;
         }
         var abandonedCredential = settings.PendingPostgreSqlCredentialReference;
@@ -304,7 +330,7 @@ public sealed class DatabaseSwitchService
         finally
         {
             _databaseLock.Dispose();
-            ConnectionSettings.CleanupCredentials(abandonedCredential);
+            _connectionSettings.CleanupCredentials(abandonedCredential);
         }
         return false;
     }
@@ -316,6 +342,7 @@ public sealed class DatabaseSwitchService
         CancellationToken cancellationToken = default
     )
     {
+        var elapsed = Stopwatch.StartNew();
         var settings = _settingsService.GetSettings();
         if (!settings.PendingDatabaseProvider.HasValue)
             throw new InvalidOperationException("There is no pending database change");
@@ -345,12 +372,12 @@ public sealed class DatabaseSwitchService
         }
         else if (!destination)
         {
-            Activate(settings);
+            Activate(settings, elapsed, resumed: true);
             return;
         }
-        ConnectionSettings.UpdateAuthentication(settings, connection, password, destination);
+        _connectionSettings.UpdateAuthentication(settings, connection, password, destination);
         if (completed)
-            Activate(settings);
+            Activate(settings, elapsed, resumed: true);
     }
 
     private string AcquirePostgreSql(AppUserSettings settings) =>
@@ -381,8 +408,18 @@ public sealed class DatabaseSwitchService
         return password;
     }
 
-    private void Activate(AppUserSettings settings)
+    private void ReportStage(DatabaseTransferStage stage) => TransferStageChanged?.Invoke(stage);
+
+    private void Activate(AppUserSettings settings, Stopwatch elapsed, bool resumed)
     {
+        var sourceDescription =
+            settings.DatabaseProvider == DatabaseProvider.PostgreSql
+                ? $"PostgreSQL ({settings.PostgreSql.Describe()})"
+                : $"SQLite ({_sqlitePath})";
+        var destinationDescription =
+            settings.PendingDatabaseProvider == DatabaseProvider.PostgreSql
+                ? $"PostgreSQL ({DatabaseConnectionSettingsService.ResolvePendingPostgreSql(settings).Connection.Describe()})"
+                : $"SQLite ({_sqlitePath})";
         var previousCredential = settings.PostgreSqlCredentialReference;
         if (settings.PendingDatabaseProvider == DatabaseProvider.PostgreSql)
         {
@@ -393,17 +430,29 @@ public sealed class DatabaseSwitchService
         }
         settings.DatabaseProvider = settings.PendingDatabaseProvider!.Value;
         settings.ClearPendingDatabaseSwitch();
+        ReportStage(DatabaseTransferStage.Activating);
         try
         {
             _settingsService.SaveSettings(settings);
         }
         finally
         {
-            ConnectionSettings.CleanupCredentials(previousCredential);
+            _connectionSettings.CleanupCredentials(previousCredential);
+            ReportStage(DatabaseTransferStage.Idle);
         }
         if (settings.DatabaseProvider == DatabaseProvider.Sqlite)
+        {
             _databaseLock.Dispose();
-        Log.Information("Database provider switched to {Provider}", settings.DatabaseProvider);
+            SqliteHistoryFile.PruneBackups(_sqlitePath);
+        }
+        var completionDetail = resumed ? " Resumed database activation using previously copied data." : "";
+        Log.Information(
+            "Database change completed from {Source:l} to {Destination:l} in {ElapsedMs}ms.{CompletionDetail:l}",
+            sourceDescription,
+            destinationDescription,
+            elapsed.ElapsedMilliseconds,
+            completionDetail
+        );
     }
 
     internal static bool HasCompletionMarker(ApplicationDbContext target, string switchId) =>
@@ -430,7 +479,8 @@ public sealed class DatabaseSwitchService
                     settings.PendingDatabaseSwitchId!,
                     false,
                     cancellationToken,
-                    _databaseLock.VerifyHeld
+                    _databaseLock.VerifyHeld,
+                    ReportStage
                 );
             }
             cancellationToken.ThrowIfCancellationRequested();
@@ -484,7 +534,8 @@ public sealed class DatabaseSwitchService
         string switchId,
         bool replaceExisting,
         CancellationToken cancellationToken = default,
-        Action? ensureExclusiveAccess = null
+        Action? ensureExclusiveAccess = null,
+        Action<DatabaseTransferStage>? reportProgress = null
     )
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(switchId);
@@ -496,6 +547,7 @@ public sealed class DatabaseSwitchService
         if (target.Database.IsSqlite())
             DatabaseMigrations.AddTimestampMigrationMarkers(expectedMeta);
 
+        reportProgress?.Invoke(DatabaseTransferStage.Copying);
         await using var transaction = await target.Database.BeginTransactionAsync(cancellationToken);
         if (!replaceExisting && await HasApplicationDataAsync(target, cancellationToken))
             throw new InvalidOperationException(
@@ -518,6 +570,7 @@ public sealed class DatabaseSwitchService
         foreach (var (key, value) in expectedMeta)
             AppMetaStore.Write(target, key, value);
 
+        reportProgress?.Invoke(DatabaseTransferStage.Verifying);
         var actual = await DatabaseHistoryFingerprint.ReadAsync(target, cancellationToken);
         var actualMeta = AppMetaStore.ReadExisting(target);
         if (
@@ -528,12 +581,6 @@ public sealed class DatabaseSwitchService
             throw new InvalidOperationException("The copied database history did not match the source");
         ensureExclusiveAccess?.Invoke();
         await transaction.CommitAsync(cancellationToken);
-        Log.Information(
-            "Database history copied and verified: {DeviceCount} devices, {EventCount} events, {SnapshotCount} activity minutes",
-            actual.Devices.Count,
-            actual.Events.Count,
-            actual.Snapshots.Count
-        );
     }
 
     internal static async Task<bool> HasApplicationDataAsync(

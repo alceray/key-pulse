@@ -9,6 +9,25 @@ public sealed class DatabaseConnectionSettingsService(
     IDatabaseCredentialStore credentials
 )
 {
+    public static (PostgreSqlConnectionSettings Connection, string? CredentialReference) ResolveRecoveryPostgreSql(
+        AppUserSettings settings,
+        DatabaseConnectionRole role
+    )
+    {
+        // Recovery must stay accessible even when a pending destination is incomplete.
+        if (
+            role == DatabaseConnectionRole.Destination
+            && settings.PendingDatabaseProvider == DatabaseProvider.PostgreSql
+        )
+            return (
+                settings.PendingPostgreSql ?? settings.PostgreSql,
+                settings.PendingPostgreSql == null
+                    ? settings.PostgreSqlCredentialReference
+                    : settings.PendingPostgreSqlCredentialReference
+            );
+        return (settings.PostgreSql, settings.PostgreSqlCredentialReference);
+    }
+
     public static (PostgreSqlConnectionSettings Connection, string? CredentialReference) ResolvePendingPostgreSql(
         AppUserSettings settings
     )

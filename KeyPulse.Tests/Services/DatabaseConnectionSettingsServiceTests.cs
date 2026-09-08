@@ -12,6 +12,57 @@ namespace KeyPulse.Tests.Services;
 public class DatabaseConnectionSettingsServiceTests
 {
     [Fact]
+    public void RecoverySelection_KeepsCredentialsPaired_AndAllowsIncompletePendingSettings()
+    {
+        var settings = new AppUserSettings
+        {
+            DatabaseProvider = DatabaseProvider.PostgreSql,
+            PostgreSql = new() { Database = "source" },
+            PostgreSqlCredentialReference = "source-reference",
+            PendingDatabaseProvider = DatabaseProvider.PostgreSql,
+            PendingPostgreSql = new() { Database = "destination" },
+            PendingPostgreSqlCredentialReference = "destination-reference",
+        };
+        var source = DatabaseConnectionSettingsService.ResolveRecoveryPostgreSql(
+            settings,
+            DatabaseConnectionRole.Source
+        );
+        source.Connection.ShouldBeSameAs(settings.PostgreSql);
+        source.CredentialReference.ShouldBe("source-reference");
+        var destination = DatabaseConnectionSettingsService.ResolveRecoveryPostgreSql(
+            settings,
+            DatabaseConnectionRole.Destination
+        );
+        destination.Connection.ShouldBeSameAs(settings.PendingPostgreSql);
+        destination.CredentialReference.ShouldBe("destination-reference");
+
+        settings.PendingPostgreSqlCredentialReference = null;
+        destination = DatabaseConnectionSettingsService.ResolveRecoveryPostgreSql(
+            settings,
+            DatabaseConnectionRole.Destination
+        );
+        destination.Connection.Database.ShouldBe("destination");
+        destination.CredentialReference.ShouldBeNull();
+        Should.Throw<InvalidOperationException>(
+            () => DatabaseConnectionSettingsService.ResolvePendingPostgreSql(settings)
+        );
+
+        settings.DatabaseProvider = DatabaseProvider.Sqlite;
+        settings.PendingPostgreSql = null;
+        destination = DatabaseConnectionSettingsService.ResolveRecoveryPostgreSql(
+            settings,
+            DatabaseConnectionRole.Destination
+        );
+        destination.ShouldBe(source);
+        settings.PendingDatabaseProvider = DatabaseProvider.Sqlite;
+        destination = DatabaseConnectionSettingsService.ResolveRecoveryPostgreSql(
+            settings,
+            DatabaseConnectionRole.Destination
+        );
+        destination.ShouldBe(source);
+    }
+
+    [Fact]
     public void CredentialWriteFailure_DoesNotPublishPendingSettingsOrReplaceSourcePassword()
     {
         using var scope = new DatabaseSwitchTestScope();

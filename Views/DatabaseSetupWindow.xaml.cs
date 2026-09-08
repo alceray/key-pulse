@@ -11,12 +11,12 @@ public partial class DatabaseSetupWindow : Window
     private readonly IDatabaseCredentialStore _credentialStore;
     private readonly bool _recoveryMode;
     private readonly DatabaseSwitchService? _switchService;
+    private readonly DatabaseConnectionSettingsService _connectionSettings;
 
     private DatabaseConnectionRole SelectedConnectionRole =>
         RecoveryConnectionComboBox.SelectedItem is DatabaseConnectionRole role
             ? role
             : DatabaseConnectionRole.Destination;
-    private DatabaseConnectionSettingsService ConnectionSettings => new(_settingsService, _credentialStore);
 
     public DatabaseSetupWindow(
         string caption,
@@ -31,6 +31,7 @@ public partial class DatabaseSetupWindow : Window
         Title = caption;
         _settingsService = settingsService;
         _credentialStore = credentialStore;
+        _connectionSettings = new(settingsService, credentialStore);
         _recoveryMode = recoveryMode;
         _switchService = switchService;
         SslModeComboBox.ItemsSource = Enum.GetValues<PostgreSqlSslMode>();
@@ -56,7 +57,7 @@ public partial class DatabaseSetupWindow : Window
         SqliteRadio.IsEnabled = PostgreSqlRadio.IsEnabled = !settings.PendingDatabaseProvider.HasValue;
         if (direct)
             DescriptionText.Text =
-                $"Source: {settings.PostgreSql.Describe()}\nDestination: {(settings.PendingPostgreSql ?? settings.PostgreSql).Describe()}. Correct authentication below, retry, or cancel.";
+                $"Source: {settings.PostgreSql.Describe()}\nDestination: {DatabaseConnectionSettingsService.ResolveRecoveryPostgreSql(settings, DatabaseConnectionRole.Destination).Connection.Describe()}. Correct authentication below, retry, or cancel.";
 
         if (settings.DatabaseProvider == DatabaseProvider.PostgreSql || recoveryMode)
             PostgreSqlRadio.IsChecked = true;
@@ -90,14 +91,10 @@ public partial class DatabaseSetupWindow : Window
     private void LoadRecoveryConnection()
     {
         var settings = _settingsService.GetSettings();
-        var destination =
-            SelectedConnectionRole == DatabaseConnectionRole.Destination
-            && settings.PendingDatabaseProvider == DatabaseProvider.PostgreSql;
-        var connection = destination ? settings.PendingPostgreSql ?? settings.PostgreSql : settings.PostgreSql;
-        var reference =
-            destination && settings.PendingPostgreSql != null
-                ? settings.PendingPostgreSqlCredentialReference
-                : settings.PostgreSqlCredentialReference;
+        var (connection, reference) = DatabaseConnectionSettingsService.ResolveRecoveryPostgreSql(
+            settings,
+            SelectedConnectionRole
+        );
         HostTextBox.Text = connection.Host;
         PortTextBox.Text = connection.Port.ToString();
         DatabaseTextBox.Text = connection.Database;
@@ -202,7 +199,7 @@ public partial class DatabaseSetupWindow : Window
                         ) != MessageBoxResult.Yes
                     )
                         return;
-                    ConnectionSettings.ScheduleSqlite(settings);
+                    _connectionSettings.ScheduleSqlite(settings);
                 }
                 else
                 {
@@ -217,9 +214,9 @@ public partial class DatabaseSetupWindow : Window
                 var password = ReadPassword();
                 await DatabaseConfigurationService.TestPostgreSqlAsync(connection, password);
                 if (_recoveryMode && settings.DatabaseProvider == DatabaseProvider.PostgreSql)
-                    ConnectionSettings.UpdateAuthentication(settings, connection, password);
+                    _connectionSettings.UpdateAuthentication(settings, connection, password);
                 else
-                    ConnectionSettings.SchedulePostgreSql(
+                    _connectionSettings.SchedulePostgreSql(
                         settings,
                         connection,
                         password,

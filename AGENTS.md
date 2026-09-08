@@ -80,12 +80,13 @@ Injection
 8. **Database configuration and switching**
     - SQLite remains the default; first-run setup and Settings can select a dedicated PostgreSQL database
     - Settings uses **Save and restart**: save the pending change after confirmation, launch the same executable with preserved arguments, and shut down normally. The replacement waits for the previous process to exit before opening logs, acquiring the mutex, or transferring history; it reopens the main window even in tray mode. See `Services/AppRestartService.cs` and `App.Restart`.
+    - Startup database work runs off the UI thread. A themed transfer window reports preparation, copying, verification, and activation, and requests cancellation through Stop and exit. Recovery dialogs stay on the UI thread, and capture begins only after successful preflight. Completion logs include endpoints, current-attempt duration, and whether activation resumed a committed copy. Do not include row counts in completion logs.
     - Non-secret PostgreSQL settings are build-isolated in `settings.json`; passwords use build-qualified Windows Credential Manager entries
     - Direct PostgreSQL-to-PostgreSQL moves keep `PostgreSql` and its credential reference active until activation. `PendingPostgreSql` and its separate credential reference describe the destination. New credentials get unique build-qualified entries, and connection/reference changes publish together through atomic settings writes. Cleanup checks durable references and never deletes the legacy default entry.
     - Direct transfers hold separate nonblocking source and destination advisory locks before target migrations or history reads. Source schema validation is read-only. Destination markers are checked before source access, so committed copies can activate without the source. Recovery can correct either connection's authentication but cannot change confirmed endpoints. See `Services/Database/DatabaseConnectionSettingsService.cs`.
     - `PostgreSqlApplicationDbContext` owns a separate PostgreSQL migration set under `Migrations/PostgreSql`
     - Provider switches run through one preflight/recovery loop before DI/monitoring and copy history in both directions. PostgreSQL replacement requires explicit confirmation. Transfers verify table counts and persisted-content fingerprints in one target transaction and preserve retention metadata.
-    - PostgreSQL-to-SQLite exports use a staging file, a verified `.pre-import` backup in `DbBackups`, and a checkpointed file replacement. SQLite timestamp migration markers prevent repeated UTC conversion.
+    - PostgreSQL-to-SQLite exports use a staging file, a verified `.pre-import` backup in `DbBackups`, and a checkpointed file replacement. After successful SQLite activation or initialization, cleanup keeps the three newest automatic backups per database, counting import and migration backups together. SQLite timestamp migration markers prevent repeated UTC conversion.
     - The PostgreSQL advisory lock spans transfer and activation, then transfers to DI ownership when PostgreSQL stays active. Settings are published atomically. Destination-local `DatabaseImportSwitchId` markers make retries complete activation without recopying, including empty histories.
     - Debug and Release must use separate PostgreSQL databases; a PostgreSQL advisory lock prevents concurrent KeyPulse writers
     - See: `Services/Database/DatabaseSwitchService.cs`, `Services/Database/SqliteHistoryFile.cs`, `Data/ConfiguredDbContextFactory.cs`
@@ -244,6 +245,7 @@ Device state management is centralized in `UsbMonitorService.AddDeviceEvent()`:
 
 ### TODO Planning
 
+- Create TODO files only when the user explicitly requests one. They are reserved for long tasks that need written steps.
 - Every TODO created or substantively updated must include a **code churn estimate**.
 - Estimate affected file counts and lines added/deleted as ranges, separating implementation, tests,
   and documentation where useful. State the main assumptions and update the estimate if scope changes.

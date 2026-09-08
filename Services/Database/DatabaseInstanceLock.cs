@@ -63,7 +63,7 @@ public sealed class DatabaseInstanceLock : IDisposable
 
             _connection = connection;
             _connectionString = connectionString;
-            Log.Debug("Exclusive PostgreSQL database lock acquired");
+            Log.Debug("PostgreSQL lock acquired for single-instance access");
         }
     }
 
@@ -95,7 +95,7 @@ public sealed class DatabaseInstanceLock : IDisposable
             }
             catch (Exception ex)
             {
-                Log.Warning(ex, "Failed to release the exclusive database lock");
+                Log.Warning(ex, "Failed to release the PostgreSQL instance lock");
             }
             finally
             {

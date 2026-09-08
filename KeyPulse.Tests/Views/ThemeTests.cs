@@ -40,6 +40,7 @@ public class ThemeTests
                     "DashboardView",
                     "TroubleshootingView",
                     "DatabaseSetupWindow",
+                    "DatabaseTransferWindow",
                     "CloseToTrayHintWindow",
                 }
             )

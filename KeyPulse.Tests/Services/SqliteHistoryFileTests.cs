@@ -12,6 +12,88 @@ namespace KeyPulse.Tests.Services;
 public class SqliteHistoryFileTests
 {
     [Fact]
+    public void Pruning_KeepsThreeNewestBackupsAcrossBothKinds_AndRemovesExpiredSidecars()
+    {
+        using var scope = new DatabaseSwitchTestScope();
+        var directory = Path.Combine(scope.DirectoryPath, AppConstants.Paths.DatabaseBackupsDirectoryName);
+        Directory.CreateDirectory(directory);
+        var names = new[]
+        {
+            "history-20260901-120000-123.pre-migration.db",
+            "history-20260902-120000-0123456789abcdef0123456789abcdef.pre-import.db",
+            "history-20260903-120000.pre-import.db",
+            "history-20260904-120000-456.pre-migration.db",
+            "history-20260904-120000-2.pre-import.db",
+        };
+        var paths = names.Select(name => Path.Combine(directory, name)).ToArray();
+        var timestamp = new DateTime(2026, 9, 1, 12, 0, 0, DateTimeKind.Utc);
+        for (var index = 0; index < paths.Length; index++)
+        {
+            File.WriteAllText(paths[index], "backup");
+            File.SetLastWriteTimeUtc(paths[index], timestamp.AddDays(10 - index));
+            File.SetCreationTimeUtc(paths[index], timestamp.AddDays(index));
+            foreach (var suffix in new[] { "-wal", "-shm", "-journal" })
+                File.WriteAllText(paths[index] + suffix, "sidecar");
+        }
+        var unrelated = new[] { "other-20260901-120000.pre-import.db", "history-manual.pre-import.db", "notes.txt" };
+        foreach (var name in unrelated)
+            File.WriteAllText(Path.Combine(directory, name), "preserve");
+
+        SqliteHistoryFile.PruneBackups(scope.SqlitePath);
+        SqliteHistoryFile.PruneBackups(scope.SqlitePath);
+
+        for (var index = 0; index < paths.Length; index++)
+            foreach (var suffix in new[] { "", "-wal", "-shm", "-journal" })
+                File.Exists(paths[index] + suffix).ShouldBe(index >= 2);
+        foreach (var name in unrelated)
+            File.ReadAllText(Path.Combine(directory, name)).ShouldBe("preserve");
+    }
+
+    [Fact]
+    public void Pruning_LockedOldBackupPreservesItsSidecars_AndCanBeRetried()
+    {
+        using var scope = new DatabaseSwitchTestScope();
+        var timestamp = new DateTime(2026, 9, 1, 12, 0, 0);
+        var paths = Enumerable
+            .Range(0, 4)
+            .Select(index => SqliteHistoryFile.ReserveBackupFile(scope.SqlitePath, timestamp.AddDays(index)))
+            .ToArray();
+        for (var index = 0; index < paths.Length; index++)
+            File.SetCreationTimeUtc(paths[index], timestamp.AddDays(index));
+        File.WriteAllText(paths[0] + "-wal", "preserve");
+
+        using (var locked = new FileStream(paths[0], FileMode.Open, FileAccess.Read, FileShare.Read))
+        {
+            SqliteHistoryFile.PruneBackups(scope.SqlitePath);
+            paths.All(File.Exists).ShouldBeTrue();
+            File.ReadAllText(paths[0] + "-wal").ShouldBe("preserve");
+        }
+        SqliteHistoryFile.PruneBackups(scope.SqlitePath);
+        File.Exists(paths[0]).ShouldBeFalse();
+        File.Exists(paths[0] + "-wal").ShouldBeFalse();
+        paths.Skip(1).All(File.Exists).ShouldBeTrue();
+    }
+
+    [Fact]
+    public void BackupNames_UseTimestamp_AndPreserveExistingFilesOnCollision()
+    {
+        using var scope = new DatabaseSwitchTestScope();
+        var timestamp = new DateTime(2026, 9, 8, 18, 45, 51);
+        var first = SqliteHistoryFile.ReserveBackupFile(scope.SqlitePath, timestamp);
+        File.WriteAllText(first, "first backup");
+        var second = SqliteHistoryFile.ReserveBackupFile(scope.SqlitePath, timestamp);
+        File.WriteAllText(second, "second backup");
+        var third = SqliteHistoryFile.ReserveBackupFile(scope.SqlitePath, timestamp);
+
+        Path.GetFileName(first).ShouldBe("history-20260908-184551.pre-import.db");
+        Path.GetFileName(second).ShouldBe("history-20260908-184551-2.pre-import.db");
+        Path.GetFileName(third).ShouldBe("history-20260908-184551-3.pre-import.db");
+        File.ReadAllText(first).ShouldBe("first backup");
+        File.ReadAllText(second).ShouldBe("second backup");
+        File.Exists(third).ShouldBeTrue();
+    }
+
+    [Fact]
     public async Task Backup_PreservesCommittedWalData_AndCanBeRestoredWithoutSidecars()
     {
         using var scope = new DatabaseSwitchTestScope();

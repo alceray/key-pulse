@@ -15,6 +15,7 @@ public class SettingsViewModel : ToastMessageViewModelBase
     private readonly StartupRegistrationService _startupRegistrationService;
     private readonly UpdateService _updateService;
     private readonly IDatabaseCredentialStore _databaseCredentialStore;
+    private readonly DatabaseConnectionSettingsService _connectionSettings;
     private bool _launchOnLogin;
     private bool _autoInstallUpdates;
     private bool _closeToTray;
@@ -36,7 +37,6 @@ public class SettingsViewModel : ToastMessageViewModelBase
     private bool _isEditingConnection;
     private bool _hasPendingDatabaseChange;
     private string _pendingDatabaseSummary = "";
-    private DatabaseConnectionSettingsService ConnectionSettings => new(_appSettingsService, _databaseCredentialStore);
 
     public SettingsViewModel(
         AppSettingsService appSettingsService,
@@ -49,6 +49,7 @@ public class SettingsViewModel : ToastMessageViewModelBase
         _startupRegistrationService = startupRegistrationService;
         _updateService = updateService;
         _databaseCredentialStore = databaseCredentialStore;
+        _connectionSettings = new(appSettingsService, databaseCredentialStore);
 
         UpdateActionCommand = new AsyncRelayCommand(_ => RunUpdateActionAsync(), _ => !_isCheckingUpdates);
         TestDatabaseConnectionCommand = new AsyncRelayCommand(
@@ -493,7 +494,7 @@ public class SettingsViewModel : ToastMessageViewModelBase
                             ) != MessageBoxResult.Yes
                         )
                             return;
-                        ConnectionSettings.SchedulePostgreSql(
+                        _connectionSettings.SchedulePostgreSql(
                             settings,
                             postgreSql,
                             password,
@@ -502,7 +503,7 @@ public class SettingsViewModel : ToastMessageViewModelBase
                         );
                     }
                     else
-                        ConnectionSettings.UpdateAuthentication(settings, postgreSql, password);
+                        _connectionSettings.UpdateAuthentication(settings, postgreSql, password);
                 }
                 else if (settings.DatabaseProvider == DatabaseProvider.PostgreSql)
                 {
@@ -516,7 +517,7 @@ public class SettingsViewModel : ToastMessageViewModelBase
                         ) != MessageBoxResult.Yes
                     )
                         return;
-                    ConnectionSettings.ScheduleSqlite(settings);
+                    _connectionSettings.ScheduleSqlite(settings);
                 }
             }
             saved = true;

@@ -9,6 +9,64 @@ namespace KeyPulse.Tests.Services;
 
 public class DatabaseSwitchServiceTests
 {
+    [Fact]
+    public async Task StopDuringActivation_PreservesCommittedCopy_AndDoesNotFinishStartup()
+    {
+        using var scope = new DatabaseSwitchTestScope();
+        var settings = scope.Schedule(DatabaseProvider.PostgreSql, DatabaseProvider.Sqlite);
+        using (var target = scope.CreateDatabase())
+            AppMetaStore.Write(target, DatabaseSwitchService.ImportSwitchMetaKey, settings.PendingDatabaseSwitchId!);
+        using var cancellation = new CancellationTokenSource();
+        scope.Switch.TransferStageChanged += stage =>
+        {
+            if (stage == DatabaseTransferStage.Activating)
+                cancellation.Cancel();
+        };
+
+        await Should.ThrowAsync<OperationCanceledException>(
+            () => scope.Switch.PrepareStartupAsync(_ => false, cancellation.Token)
+        );
+
+        scope.Settings.GetSettings().DatabaseProvider.ShouldBe(DatabaseProvider.Sqlite);
+        scope.Settings.GetSettings().PendingDatabaseProvider.ShouldBeNull();
+    }
+
+    [Theory]
+    [InlineData(DatabaseTransferStage.Copying)]
+    [InlineData(DatabaseTransferStage.Verifying)]
+    public async Task CancelFromProgress_RollsBackBeforePublishingTheCopy(DatabaseTransferStage cancelAt)
+    {
+        using var scope = new DatabaseSwitchTestScope();
+        using var source = scope.CreateDatabase();
+        using var target = scope.CreateDatabase(Path.Combine(scope.DirectoryPath, "target.db"));
+        DatabaseSwitchTestScope.Seed(source);
+        DatabaseSwitchTestScope.Seed(target, "existing-device");
+        var expected = await DatabaseHistoryFingerprint.ReadAsync(target);
+        using var cancellation = new CancellationTokenSource();
+
+        await Should.ThrowAsync<OperationCanceledException>(
+            () =>
+                Task.Run(
+                    () =>
+                        DatabaseSwitchService.CopyHistoryAsync(
+                            source,
+                            target,
+                            Guid.NewGuid().ToString("N"),
+                            true,
+                            cancellation.Token,
+                            reportProgress: stage =>
+                            {
+                                if (stage == cancelAt)
+                                    cancellation.Cancel();
+                            }
+                        )
+                )
+        );
+
+        (await DatabaseHistoryFingerprint.ReadAsync(target)).ShouldBe(expected);
+        AppMetaStore.ReadExisting(target)[DatabaseSwitchService.ImportSwitchMetaKey].ShouldBe("previous-switch");
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -51,7 +109,10 @@ public class DatabaseSwitchServiceTests
         var expected = await DatabaseHistoryFingerprint.ReadAsync(source);
         var switchId = Guid.NewGuid().ToString("N");
 
-        await DatabaseSwitchService.CopyHistoryAsync(source, target, switchId, false);
+        var stages = new List<DatabaseTransferStage>();
+        await DatabaseSwitchService.CopyHistoryAsync(source, target, switchId, false, reportProgress: stages.Add);
+
+        stages.ShouldBe(new[] { DatabaseTransferStage.Copying, DatabaseTransferStage.Verifying });
 
         (await DatabaseHistoryFingerprint.ReadAsync(target)).ShouldBe(expected);
         var copied = target.Devices.AsNoTracking().Single();
@@ -210,6 +271,10 @@ public class DatabaseSwitchServiceTests
     public async Task ActivationSaveFailure_PreservesPendingId_AndRetryOnlyActivates()
     {
         using var scope = new DatabaseSwitchTestScope();
+        var backups = Enumerable
+            .Range(0, 4)
+            .Select(index => SqliteHistoryFile.ReserveBackupFile(scope.SqlitePath, DateTime.Now.AddSeconds(index)))
+            .ToArray();
         var settings = scope.Schedule(DatabaseProvider.PostgreSql, DatabaseProvider.Sqlite);
         using (var target = scope.CreateDatabase())
             AppMetaStore.Write(target, DatabaseSwitchService.ImportSwitchMetaKey, settings.PendingDatabaseSwitchId!);
@@ -217,9 +282,11 @@ public class DatabaseSwitchServiceTests
         {
             await Should.ThrowAsync<IOException>(() => scope.Switch.ProcessPendingSwitchAsync());
             scope.Settings.GetSettings().PendingDatabaseSwitchId.ShouldBe(settings.PendingDatabaseSwitchId);
+            backups.All(File.Exists).ShouldBeTrue();
         }
         await scope.Switch.ProcessPendingSwitchAsync();
         scope.Settings.GetSettings().DatabaseProvider.ShouldBe(DatabaseProvider.Sqlite);
+        backups.Count(File.Exists).ShouldBe(3);
     }
 
     [Fact]

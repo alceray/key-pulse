@@ -128,20 +128,61 @@ public partial class App
             preflightCredentialStore,
             databaseInstanceLock
         );
-        var databaseReady = await switchService.PrepareStartupAsync(ex =>
+        using var transferCancellation = new CancellationTokenSource();
+        var transferWindow = new DatabaseTransferWindow(_appName);
+        transferWindow.CancelRequested += transferCancellation.Cancel;
+        void ShowTransferStage(DatabaseTransferStage stage)
         {
-            var recoveryWindow = new DatabaseSetupWindow(
-                _appName,
-                preflightSettingsService,
-                preflightCredentialStore,
-                recoveryMode: true,
-                failureMessage: ex.Message,
-                switchService: switchService
+            if (ShutdownDispose.IsDispatcherUsable(Dispatcher))
+                Dispatcher.Invoke(() => transferWindow.SetStage(stage));
+        }
+        switchService.TransferStageChanged += ShowTransferStage;
+        bool databaseReady;
+        try
+        {
+            // SQLite's async operations can execute synchronously. Keep copying and verification
+            // off the dispatcher so startup status and cancellation remain responsive.
+            databaseReady = await Task.Run(
+                () =>
+                    switchService.PrepareStartupAsync(
+                        ex =>
+                        {
+                            if (
+                                transferCancellation.IsCancellationRequested
+                                || !ShutdownDispose.IsDispatcherUsable(Dispatcher)
+                            )
+                                return false;
+                            return Dispatcher.Invoke(() =>
+                            {
+                                transferWindow.Hide();
+                                var recoveryWindow = new DatabaseSetupWindow(
+                                    _appName,
+                                    preflightSettingsService,
+                                    preflightCredentialStore,
+                                    recoveryMode: true,
+                                    failureMessage: ex.Message,
+                                    switchService: switchService
+                                );
+                                return recoveryWindow.ShowDialog() == true;
+                            });
+                        },
+                        transferCancellation.Token
+                    )
             );
-            return recoveryWindow.ShowDialog() == true;
-        });
+            databaseReady &= !transferCancellation.IsCancellationRequested;
+        }
+        catch (OperationCanceledException) when (transferCancellation.IsCancellationRequested)
+        {
+            databaseReady = false;
+        }
+        finally
+        {
+            switchService.TransferStageChanged -= ShowTransferStage;
+            transferWindow.Complete();
+        }
         if (!databaseReady)
         {
+            databaseInstanceLock.Dispose();
             Shutdown();
             return;
         }
@@ -159,7 +200,7 @@ public partial class App
         // Resolve startup mode with precedence: launch args > build default.
         RunInBackground = ResolveRunInBackground(e.Args);
         ShutdownMode = ResolveShutdownMode(RunInBackground);
-        Log.Information("Startup mode resolved: RunInBackground={RunInBackground}", RunInBackground);
+        Log.Information("Starting in {StartupMode:l} mode", RunInBackground ? "background" : "windowed");
 
         SyncStartupRegistrationFromSettings();
 
@@ -434,7 +475,6 @@ public partial class App
             Timeout.Infinite,
             false
         );
-        Log.Debug("Activation signal listener started");
     }
 
     private static bool SignalExistingInstance(string instanceId)
