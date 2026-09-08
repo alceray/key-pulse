@@ -49,7 +49,7 @@ public class SettingsViewModel : ToastMessageViewModelBase
 
         UpdateActionCommand = new AsyncRelayCommand(_ => RunUpdateActionAsync(), _ => !_isCheckingUpdates);
         TestDatabaseConnectionCommand = new AsyncRelayCommand(_ => TestDatabaseConnectionAsync());
-        ApplyDatabaseCommand = new AsyncRelayCommand(_ => ApplyDatabaseAsync());
+        SaveAndRestartDatabaseCommand = new AsyncRelayCommand(_ => SaveAndRestartDatabaseAsync());
 
         _appSettingsService.SettingsChanged += OnSettingsChanged;
         _updateService.UpdateStatusChanged += OnUpdateStatusChanged;
@@ -128,7 +128,7 @@ public class SettingsViewModel : ToastMessageViewModelBase
 
     public IReadOnlyList<PostgreSqlSslMode> PostgreSqlSslModeChoices { get; } = Enum.GetValues<PostgreSqlSslMode>();
     public ICommand TestDatabaseConnectionCommand { get; }
-    public ICommand ApplyDatabaseCommand { get; }
+    public ICommand SaveAndRestartDatabaseCommand { get; }
 
     public DatabaseProvider SelectedDatabaseProvider
     {
@@ -444,8 +444,9 @@ public class SettingsViewModel : ToastMessageViewModelBase
         }
     }
 
-    private async Task ApplyDatabaseAsync()
+    private async Task SaveAndRestartDatabaseAsync()
     {
+        var saved = false;
         try
         {
             var settings = _appSettingsService.GetSettings();
@@ -471,7 +472,7 @@ public class SettingsViewModel : ToastMessageViewModelBase
                 {
                     var hasHistory = await DatabaseConfigurationService.HasReadableSqliteHistoryAsync();
                     var message =
-                        $"Copy local history to PostgreSQL at {postgreSql.Host}:{postgreSql.Port}, database {postgreSql.Database}, after restart? "
+                        $"Restart KeyPulse now and copy local history to PostgreSQL at {postgreSql.Host}:{postgreSql.Port}, database {postgreSql.Database}? "
                         + "Any existing KeyPulse history in that database will be replaced. "
                         + (
                             hasHistory ? "The local SQLite file will be kept." : "The local history is currently empty."
@@ -497,7 +498,7 @@ public class SettingsViewModel : ToastMessageViewModelBase
             else if (_activeDatabaseProvider == DatabaseProvider.PostgreSql)
             {
                 var answer = MessageBox.Show(
-                    "Copy PostgreSQL history to SQLite after restart? The current local database will be backed up and replaced with the copied history.",
+                    "Restart KeyPulse now and copy PostgreSQL history to SQLite? The current local database will be backed up and replaced with the copied history.",
                     AppConstants.App.DefaultName,
                     MessageBoxButton.YesNo,
                     MessageBoxImage.Information,
@@ -512,14 +513,26 @@ public class SettingsViewModel : ToastMessageViewModelBase
             }
 
             _appSettingsService.SaveSettings(settings);
+            saved = true;
             _isEditingConnection = false;
             RaiseConnectionStateChanged();
-            ToastMessage = "Database change saved. Restart KeyPulse to apply it.";
+            ToastMessage = "Restarting KeyPulse...";
+            var app =
+                Application.Current as App
+                ?? throw new InvalidOperationException("The running KeyPulse application is unavailable");
+            app.Restart();
         }
         catch (Exception ex)
         {
-            ToastMessage = $"Database change failed: {ex.Message}";
-            Log.Warning(ex, "Database setting could not be saved");
+            ToastMessage = saved
+                ? $"Database change saved, but restart failed: {ex.Message}. Close and reopen KeyPulse to finish."
+                : $"Database change failed: {ex.Message}";
+            Log.Warning(
+                ex,
+                saved
+                    ? "Application restart failed after saving database settings"
+                    : "Database setting could not be saved"
+            );
         }
     }
 

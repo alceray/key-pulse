@@ -79,6 +79,7 @@ Injection
 
 8. **Database configuration and switching**
     - SQLite remains the default; first-run setup and Settings can select a dedicated PostgreSQL database
+    - Settings uses **Save and restart**: save the pending change after confirmation, launch the same executable with preserved arguments, and shut down normally. The replacement waits for the previous process to exit before opening logs, acquiring the mutex, or transferring history; it reopens the main window even in tray mode. See `Services/AppRestartService.cs` and `App.Restart`.
     - Non-secret PostgreSQL settings are build-isolated in `settings.json`; passwords use build-qualified Windows Credential Manager entries
     - `PostgreSqlApplicationDbContext` owns a separate PostgreSQL migration set under `Migrations/PostgreSql`
     - Provider switches run through one preflight/recovery loop before DI/monitoring and copy history in both directions. PostgreSQL replacement requires explicit confirmation. Transfers verify table counts and persisted-content fingerprints in one target transaction and preserve retention metadata.

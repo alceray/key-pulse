@@ -238,8 +238,8 @@
                 Visibility="{Binding ShowDatabaseActions, Converter={StaticResource BoolToVisibility}}"
               >
                 <Button
-                  Content="Apply on restart"
-                  Command="{Binding ApplyDatabaseCommand}"
+                  Content="Save and restart"
+                  Command="{Binding SaveAndRestartDatabaseCommand}"
                   Padding="12,4"
                   Margin="0,0,8,0"
                 />

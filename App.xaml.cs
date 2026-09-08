@@ -45,6 +45,25 @@ public partial class App
     {
         var startupStopwatch = System.Diagnostics.Stopwatch.StartNew();
         _appName = AppConstants.App.DefaultName;
+        bool restarting;
+        try
+        {
+            using var restartTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+            restarting = await AppRestartService.WaitForPreviousInstanceAsync(e.Args, restartTimeout.Token);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                "KeyPulse could not finish restarting. Wait for the previous instance to close, then open KeyPulse again. "
+                    + ex.Message,
+                _appName,
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning
+            );
+            Shutdown();
+            return;
+        }
+        // A replacement process must not contend for the old process's log file or mutex.
         var instanceId = GetInstanceId(_appName);
         ConfigureLogging();
         Log.Information(AppConstants.Troubleshooting.SessionStartMarker);
@@ -159,7 +178,7 @@ public partial class App
         // First launch always shows the window, even in Release/tray mode.
         var settings = _appSettingsService.GetSettings();
 
-        if (!RunInBackground || showedInitialDatabaseSetup)
+        if (!RunInBackground || showedInitialDatabaseSetup || restarting)
         {
             MainWindow = new MainWindow();
             MainWindow.Title = _appName;
@@ -218,6 +237,25 @@ public partial class App
         startupStopwatch.Stop();
         Log.Information("Application startup completed in {ElapsedMs}ms", startupStopwatch.ElapsedMilliseconds);
         base.OnStartup(e);
+    }
+
+    public void Restart()
+    {
+        Dispatcher.VerifyAccess();
+        if (_isShuttingDown || _isSessionEnding)
+            throw new InvalidOperationException("KeyPulse is already shutting down");
+
+        var start = AppRestartService.CreateStartInfo(
+            Environment.ProcessPath ?? throw new InvalidOperationException("The application path is unavailable"),
+            Environment.GetCommandLineArgs(),
+            Environment.ProcessId
+        );
+        using var replacement =
+            System.Diagnostics.Process.Start(start)
+            ?? throw new InvalidOperationException("The replacement KeyPulse process could not be started");
+        Log.Information("Application restarting to apply database settings");
+        _isShuttingDown = true;
+        Shutdown();
     }
 
     protected override void OnExit(ExitEventArgs e)
@@ -565,6 +603,8 @@ public partial class App
 
     private void MainWindow_Closing(object? sender, CancelEventArgs e)
     {
+        if (_isShuttingDown || _isSessionEnding)
+            return;
         // Windowed builds always exit on close; the tray only exists in background mode.
         if (!RunInBackground)
             return;
