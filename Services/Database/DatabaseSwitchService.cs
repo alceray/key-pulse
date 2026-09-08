@@ -9,7 +9,13 @@ using Serilog;
 
 namespace KeyPulse.Services;
 
-/// <summary>Completes provider changes while monitoring is stopped during application startup.</summary>
+public enum DatabaseConnectionRole
+{
+    Source,
+    Destination,
+}
+
+/// <summary>Completes database changes while monitoring is stopped during application startup.</summary>
 public sealed class DatabaseSwitchService
 {
     private const int BatchSize = 1000;
@@ -18,6 +24,8 @@ public sealed class DatabaseSwitchService
     private readonly IDatabaseCredentialStore _credentialStore;
     private readonly DatabaseInstanceLock _databaseLock;
     private readonly string _sqlitePath;
+    public DatabaseConnectionRole FailureConnection { get; private set; } = DatabaseConnectionRole.Destination;
+    private DatabaseConnectionSettingsService ConnectionSettings => new(_settingsService, _credentialStore);
 
     public DatabaseSwitchService(
         AppSettingsService settingsService,
@@ -88,6 +96,19 @@ public sealed class DatabaseSwitchService
 
     public async Task<bool> ProcessPendingSwitchAsync(CancellationToken cancellationToken = default)
     {
+        try
+        {
+            return await ProcessPendingSwitchCoreAsync(cancellationToken);
+        }
+        catch
+        {
+            _databaseLock.Dispose();
+            throw;
+        }
+    }
+
+    private async Task<bool> ProcessPendingSwitchCoreAsync(CancellationToken cancellationToken)
+    {
         var settings = _settingsService.GetSettings();
         if (!settings.PendingDatabaseProvider.HasValue)
             return false;
@@ -113,45 +134,86 @@ public sealed class DatabaseSwitchService
         }
         else if (settings.PendingDatabaseProvider == DatabaseProvider.PostgreSql)
         {
-            var password = AcquirePostgreSql(settings);
-            await DatabaseConfigurationService.TestPostgreSqlAsync(settings.PostgreSql, password, cancellationToken);
-            await using var target = ConfiguredDbContextFactory.CreatePostgreSqlContext(settings.PostgreSql, password);
-            await ValidateKnownMigrationsAsync(target, cancellationToken);
-            await target.Database.MigrateAsync(cancellationToken);
-            AppMetaStore.EnsureTable(target);
-            var populated = await HasApplicationDataAsync(target, cancellationToken);
-            if (populated && !settings.PendingDatabaseReplace)
-                throw new InvalidOperationException(
-                    "The PostgreSQL database already contains KeyPulse data. Confirm replacement in Settings."
-                );
-
-            if (settings.PendingDatabaseImport)
+            var (destination, reference) = DatabaseConnectionSettingsService.ResolvePendingPostgreSql(settings);
+            var password = AcquirePostgreSql(destination, reference, _databaseLock, DatabaseConnectionRole.Destination);
+            using var sourceLock = new DatabaseInstanceLock();
+            ApplicationDbContext? source = null;
+            try
             {
-                if (settings.DatabaseProvider != DatabaseProvider.Sqlite)
-                    throw new InvalidOperationException("The active database is not SQLite");
-                await using var source = ConfiguredDbContextFactory.CreateSqliteContext(
-                    _sqlitePath,
-                    SqliteOpenMode.ReadWrite,
-                    pooling: false
-                );
-                await source.Database.MigrateAsync(cancellationToken);
-                DatabaseMigrations.RunAll(source);
-                AppMetaStore.EnsureTable(source);
-                await CopyHistoryAsync(
-                    source,
-                    target,
-                    settings.PendingDatabaseSwitchId,
-                    settings.PendingDatabaseReplace,
-                    cancellationToken,
-                    _databaseLock.VerifyHeld
-                );
+                if (settings.DatabaseProvider == DatabaseProvider.PostgreSql)
+                {
+                    if (!settings.PendingDatabaseImport)
+                        throw new InvalidOperationException(
+                            "A PostgreSQL database change requires copying its history"
+                        );
+                    if (DatabaseConfigurationService.IsSamePostgreSqlDatabase(settings.PostgreSql, destination))
+                        throw new InvalidOperationException("The source and destination are the same database");
+                    var sourcePassword = AcquirePostgreSql(
+                        settings.PostgreSql,
+                        settings.PostgreSqlCredentialReference,
+                        sourceLock,
+                        DatabaseConnectionRole.Source
+                    );
+                    source = ConfiguredDbContextFactory.CreatePostgreSqlContext(settings.PostgreSql, sourcePassword);
+                    await ValidateSourceSchemaAsync(source, cancellationToken);
+                    await HasApplicationDataAsync(source, cancellationToken);
+                    AppMetaStore.ReadExisting(source);
+                }
+                else if (settings.DatabaseProvider == DatabaseProvider.Sqlite && settings.PendingDatabaseImport)
+                {
+                    source = ConfiguredDbContextFactory.CreateSqliteContext(
+                        _sqlitePath,
+                        SqliteOpenMode.ReadWrite,
+                        pooling: false
+                    );
+                    await source.Database.MigrateAsync(cancellationToken);
+                    DatabaseMigrations.RunAll(source);
+                    AppMetaStore.EnsureTable(source);
+                }
+                FailureConnection = DatabaseConnectionRole.Destination;
+                await DatabaseConfigurationService.TestPostgreSqlAsync(destination, password, cancellationToken);
+                await using var target = ConfiguredDbContextFactory.CreatePostgreSqlContext(destination, password);
+                await ValidateKnownMigrationsAsync(target, cancellationToken);
+                await target.Database.MigrateAsync(cancellationToken);
+                AppMetaStore.EnsureTable(target);
+                if (await HasApplicationDataAsync(target, cancellationToken) && !settings.PendingDatabaseReplace)
+                    throw new InvalidOperationException(
+                        "The PostgreSQL database already contains KeyPulse data. Confirm replacement in Settings."
+                    );
+                void VerifyLocks()
+                {
+                    if (settings.DatabaseProvider == DatabaseProvider.PostgreSql)
+                    {
+                        FailureConnection = DatabaseConnectionRole.Source;
+                        sourceLock.VerifyHeld();
+                    }
+                    FailureConnection = DatabaseConnectionRole.Destination;
+                    _databaseLock.VerifyHeld();
+                }
+                if (source != null)
+                    await CopyHistoryAsync(
+                        source,
+                        target,
+                        settings.PendingDatabaseSwitchId!,
+                        settings.PendingDatabaseReplace,
+                        cancellationToken,
+                        VerifyLocks
+                    );
+                else
+                {
+                    await using var transaction = await target.Database.BeginTransactionAsync(cancellationToken);
+                    AppMetaStore.Write(target, ImportSwitchMetaKey, settings.PendingDatabaseSwitchId!);
+                    VerifyLocks();
+                    await transaction.CommitAsync(cancellationToken);
+                }
+                // Keep both locks through settings publication; DI inherits the destination lock.
+                Activate(settings);
+                return true;
             }
-            else
+            finally
             {
-                await using var transaction = await target.Database.BeginTransactionAsync(cancellationToken);
-                AppMetaStore.Write(target, ImportSwitchMetaKey, settings.PendingDatabaseSwitchId);
-                _databaseLock.VerifyHeld();
-                await transaction.CommitAsync(cancellationToken);
+                if (source != null)
+                    await source.DisposeAsync();
             }
         }
         else
@@ -170,7 +232,11 @@ public sealed class DatabaseSwitchService
         return true;
     }
 
-    private async Task<bool> IsPendingSwitchCompleteAsync(AppUserSettings settings, CancellationToken cancellationToken)
+    private async Task<bool> IsPendingSwitchCompleteAsync(
+        AppUserSettings settings,
+        CancellationToken cancellationToken,
+        string? destinationPassword = null
+    )
     {
         if (!settings.PendingDatabaseProvider.HasValue || string.IsNullOrWhiteSpace(settings.PendingDatabaseSwitchId))
             return false;
@@ -188,15 +254,22 @@ public sealed class DatabaseSwitchService
         }
         if (settings.PendingDatabaseProvider == DatabaseProvider.PostgreSql)
         {
-            var password = AcquirePostgreSql(settings);
-            await using var target = ConfiguredDbContextFactory.CreatePostgreSqlContext(settings.PostgreSql, password);
+            var (destination, reference) = DatabaseConnectionSettingsService.ResolvePendingPostgreSql(settings);
+            var password = AcquirePostgreSql(
+                destination,
+                reference,
+                _databaseLock,
+                DatabaseConnectionRole.Destination,
+                destinationPassword
+            );
+            await using var target = ConfiguredDbContextFactory.CreatePostgreSqlContext(destination, password);
             await target.Database.OpenConnectionAsync(cancellationToken);
             return HasCompletionMarker(target, settings.PendingDatabaseSwitchId);
         }
         throw new InvalidOperationException("The pending database provider is invalid");
     }
 
-    public async Task CancelPendingSwitchAsync(
+    public async Task<bool> CancelPendingSwitchAsync(
         bool useLocalWithoutCopying = false,
         CancellationToken cancellationToken = default
     )
@@ -212,41 +285,122 @@ public sealed class DatabaseSwitchService
                 && ex is not OperationCanceledException
             )
         {
-            // Canceling an unavailable target leaves the active SQLite history intact.
+            // Canceling an unavailable target preserves the active source connection and history.
             Log.Warning(ex, "The destination could not be checked before canceling the database change");
         }
         if (completed)
         {
             Activate(settings);
-            return;
+            return true;
         }
+        var abandonedCredential = settings.PendingPostgreSqlCredentialReference;
         if (useLocalWithoutCopying)
             settings.DatabaseProvider = DatabaseProvider.Sqlite;
         settings.ClearPendingDatabaseSwitch();
-        _settingsService.SaveSettings(settings);
-        if (settings.DatabaseProvider == DatabaseProvider.Sqlite)
+        try
+        {
+            _settingsService.SaveSettings(settings);
+        }
+        finally
+        {
             _databaseLock.Dispose();
+            ConnectionSettings.CleanupCredentials(abandonedCredential);
+        }
+        return false;
     }
 
-    private string AcquirePostgreSql(AppUserSettings settings)
+    public async Task UpdatePendingAuthenticationAsync(
+        DatabaseConnectionRole role,
+        PostgreSqlConnectionSettings connection,
+        string password,
+        CancellationToken cancellationToken = default
+    )
     {
-        var password =
-            _credentialStore.ReadPostgreSqlPassword()
-            ?? throw new InvalidOperationException("The saved PostgreSQL password is unavailable");
-        DatabaseConfigurationService.EnsureNotUsedByOtherBuild(settings.PostgreSql);
-        _databaseLock.Acquire(
-            DatabaseConfigurationService.BuildPostgreSqlConnectionString(settings.PostgreSql, password)
+        var settings = _settingsService.GetSettings();
+        if (!settings.PendingDatabaseProvider.HasValue)
+            throw new InvalidOperationException("There is no pending database change");
+        var destination = role == DatabaseConnectionRole.Destination;
+        var existing = destination
+            ? DatabaseConnectionSettingsService.ResolvePendingPostgreSql(settings).Connection
+            : settings.PostgreSql;
+        if (!DatabaseConfigurationService.IsSamePostgreSqlDatabase(existing, connection))
+            throw new InvalidOperationException("Cancel the pending change before selecting a different database");
+        // Probe with proposed destination authentication before any settings or credential writes.
+        var probe = _settingsService.GetSettings();
+        if (destination)
+        {
+            if (probe.PendingPostgreSql == null)
+                probe.PostgreSql = connection;
+            else
+                probe.PendingPostgreSql = connection;
+        }
+        var completed = await IsPendingSwitchCompleteAsync(probe, cancellationToken, destination ? password : null);
+        if (!completed)
+        {
+            FailureConnection = role;
+            if (destination)
+                await DatabaseConfigurationService.TestPostgreSqlAsync(connection, password, cancellationToken);
+            else
+                await DatabaseConfigurationService.TestPostgreSqlReadAsync(connection, password, cancellationToken);
+        }
+        else if (!destination)
+        {
+            Activate(settings);
+            return;
+        }
+        ConnectionSettings.UpdateAuthentication(settings, connection, password, destination);
+        if (completed)
+            Activate(settings);
+    }
+
+    private string AcquirePostgreSql(AppUserSettings settings) =>
+        AcquirePostgreSql(
+            settings.PostgreSql,
+            settings.PostgreSqlCredentialReference,
+            _databaseLock,
+            DatabaseConnectionRole.Source
         );
+
+    private string AcquirePostgreSql(
+        PostgreSqlConnectionSettings connection,
+        string? reference,
+        DatabaseInstanceLock databaseLock,
+        DatabaseConnectionRole role,
+        string? passwordOverride = null
+    )
+    {
+        FailureConnection = role;
+        var password =
+            passwordOverride
+            ?? _credentialStore.ReadPostgreSqlPassword(reference)
+            ?? throw new InvalidOperationException(
+                $"The saved {role.ToString().ToLowerInvariant()} PostgreSQL password is unavailable"
+            );
+        DatabaseConfigurationService.EnsureNotUsedByOtherBuild(connection);
+        databaseLock.Acquire(DatabaseConfigurationService.BuildPostgreSqlConnectionString(connection, password));
         return password;
     }
 
     private void Activate(AppUserSettings settings)
     {
+        var previousCredential = settings.PostgreSqlCredentialReference;
         if (settings.PendingDatabaseProvider == DatabaseProvider.PostgreSql)
+        {
             _databaseLock.VerifyHeld();
+            var (destination, reference) = DatabaseConnectionSettingsService.ResolvePendingPostgreSql(settings);
+            settings.PostgreSql = destination.Copy();
+            settings.PostgreSqlCredentialReference = reference;
+        }
         settings.DatabaseProvider = settings.PendingDatabaseProvider!.Value;
         settings.ClearPendingDatabaseSwitch();
-        _settingsService.SaveSettings(settings);
+        try
+        {
+            _settingsService.SaveSettings(settings);
+        }
+        finally
+        {
+            ConnectionSettings.CleanupCredentials(previousCredential);
+        }
         if (settings.DatabaseProvider == DatabaseProvider.Sqlite)
             _databaseLock.Dispose();
         Log.Information("Database provider switched to {Provider}", settings.DatabaseProvider);
@@ -266,12 +420,7 @@ public sealed class DatabaseSwitchService
         {
             await using (var source = ConfiguredDbContextFactory.CreatePostgreSqlContext(settings.PostgreSql, password))
             {
-                await ValidateKnownMigrationsAsync(source, cancellationToken);
-                var pendingMigrations = await source.Database.GetPendingMigrationsAsync(cancellationToken);
-                if (pendingMigrations.Any())
-                    throw new InvalidOperationException(
-                        "The PostgreSQL history needs a schema update before it can be copied"
-                    );
+                await ValidateSourceSchemaAsync(source, cancellationToken);
                 await using var staging = ConfiguredDbContextFactory.CreateSqliteContext(stagingPath, pooling: false);
                 await staging.Database.MigrateAsync(cancellationToken);
                 AppMetaStore.EnsureTable(staging);
@@ -305,6 +454,16 @@ public sealed class DatabaseSwitchService
                 Log.Warning(ex, "Temporary database files could not be removed");
             }
         }
+    }
+
+    internal static async Task ValidateSourceSchemaAsync(
+        ApplicationDbContext source,
+        CancellationToken cancellationToken
+    )
+    {
+        await ValidateKnownMigrationsAsync(source, cancellationToken);
+        if ((await source.Database.GetPendingMigrationsAsync(cancellationToken)).Any())
+            throw new InvalidOperationException("The PostgreSQL history needs a schema update before it can be copied");
     }
 
     private static async Task ValidateKnownMigrationsAsync(

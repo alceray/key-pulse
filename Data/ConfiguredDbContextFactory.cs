@@ -17,7 +17,10 @@ public sealed class ConfiguredDbContextFactory : IDbContextFactory<ApplicationDb
         var settings = settingsService.GetSettings();
         _provider = settings.DatabaseProvider;
         _postgreSql = settings.PostgreSql.Copy();
-        _password = _provider == DatabaseProvider.PostgreSql ? credentialStore.ReadPostgreSqlPassword() : null;
+        _password =
+            _provider == DatabaseProvider.PostgreSql
+                ? credentialStore.ReadPostgreSqlPassword(settings.PostgreSqlCredentialReference)
+                : null;
     }
 
     public ApplicationDbContext CreateDbContext()

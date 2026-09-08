@@ -1,4 +1,4 @@
-﻿using System.Windows;
+using System.Windows;
 using System.Windows.Input;
 using KeyPulse.Configuration;
 using KeyPulse.Helpers;
@@ -34,6 +34,9 @@ public class SettingsViewModel : ToastMessageViewModelBase
     private PostgreSqlSslMode _postgreSqlSslMode = PostgreSqlSslMode.Prefer;
     private PostgreSqlConnectionSettings _loadedPostgreSql = new();
     private bool _isEditingConnection;
+    private bool _hasPendingDatabaseChange;
+    private string _pendingDatabaseSummary = "";
+    private DatabaseConnectionSettingsService ConnectionSettings => new(_appSettingsService, _databaseCredentialStore);
 
     public SettingsViewModel(
         AppSettingsService appSettingsService,
@@ -48,7 +51,10 @@ public class SettingsViewModel : ToastMessageViewModelBase
         _databaseCredentialStore = databaseCredentialStore;
 
         UpdateActionCommand = new AsyncRelayCommand(_ => RunUpdateActionAsync(), _ => !_isCheckingUpdates);
-        TestDatabaseConnectionCommand = new AsyncRelayCommand(_ => TestDatabaseConnectionAsync());
+        TestDatabaseConnectionCommand = new AsyncRelayCommand(
+            _ => TestDatabaseConnectionAsync(),
+            _ => !_hasPendingDatabaseChange
+        );
         SaveAndRestartDatabaseCommand = new AsyncRelayCommand(_ => SaveAndRestartDatabaseAsync());
 
         _appSettingsService.SettingsChanged += OnSettingsChanged;
@@ -179,10 +185,11 @@ public class SettingsViewModel : ToastMessageViewModelBase
 
     public bool ShowPostgreSqlForm => IsPostgreSqlSelected && (!IsPostgreSqlActive || _isEditingConnection);
 
-    public bool ShowDatabaseActions => IsStorageProviderChanged || _isEditingConnection;
+    public bool ShowDatabaseActions => _hasPendingDatabaseChange || IsStorageProviderChanged || _isEditingConnection;
 
-    // Repointing a live installation would strand its history, so only the credentials stay editable.
-    public bool CanEditConnectionTarget => !IsPostgreSqlActive;
+    public bool CanEditConnectionTarget => !_hasPendingDatabaseChange;
+    public bool HasPendingDatabaseChange => _hasPendingDatabaseChange;
+    public string PendingDatabaseSummary => _pendingDatabaseSummary;
 
     public string PostgreSqlSummary => _loadedPostgreSql.Describe();
 
@@ -190,7 +197,7 @@ public class SettingsViewModel : ToastMessageViewModelBase
 
     public void BeginEditConnection()
     {
-        if (_isEditingConnection)
+        if (_isEditingConnection || _hasPendingDatabaseChange)
             return;
 
         _isEditingConnection = true;
@@ -199,6 +206,9 @@ public class SettingsViewModel : ToastMessageViewModelBase
 
     private void RaiseConnectionStateChanged()
     {
+        OnPropertyChanged(nameof(HasPendingDatabaseChange));
+        OnPropertyChanged(nameof(PendingDatabaseSummary));
+        AsyncRelayCommand.RaiseCanExecuteChanged();
         OnPropertyChanged(nameof(ShowPostgreSqlSummary));
         OnPropertyChanged(nameof(ShowPostgreSqlForm));
         OnPropertyChanged(nameof(ShowDatabaseActions));
@@ -236,12 +246,7 @@ public class SettingsViewModel : ToastMessageViewModelBase
     public string PostgreSqlPassword
     {
         get => _postgreSqlPassword;
-        set
-        {
-            if (_postgreSqlPassword == value)
-                return;
-            _postgreSqlPassword = value;
-        }
+        set => SetDatabaseField(ref _postgreSqlPassword, value);
     }
 
     public PostgreSqlSslMode PostgreSqlSslMode
@@ -359,13 +364,12 @@ public class SettingsViewModel : ToastMessageViewModelBase
             CloseToTray = settings.CloseToTray;
             DarkMode = settings.DarkMode;
             SelectedRetentionOption = RetentionOptions.FromMonths(settings.ActivityRetentionMonths);
+            ToastMessage = string.Empty;
             LoadDatabaseSettings(settings);
 
             // Reflect the actual registration state so the UI matches the machine state.
             if (!_startupRegistrationService.IsEnabled() && LaunchOnLogin)
                 LaunchOnLogin = false;
-
-            ToastMessage = string.Empty;
         }
         finally
         {
@@ -376,33 +380,55 @@ public class SettingsViewModel : ToastMessageViewModelBase
     private void LoadDatabaseSettings(AppUserSettings settings)
     {
         _activeDatabaseProvider = settings.DatabaseProvider;
-        SelectedDatabaseProvider = settings.PendingDatabaseProvider ?? settings.DatabaseProvider;
+        _hasPendingDatabaseChange = settings.PendingDatabaseProvider.HasValue;
+        _pendingDatabaseSummary = _hasPendingDatabaseChange
+            ? $"Pending: {(settings.PendingDatabaseProvider == DatabaseProvider.PostgreSql ? (settings.PendingPostgreSql ?? settings.PostgreSql).Describe() : "local SQLite")}. Restart to finish, or cancel before making another change."
+            : "";
+        SelectedDatabaseProvider = settings.DatabaseProvider;
         _loadedPostgreSql = settings.PostgreSql.Copy();
         PostgreSqlHost = settings.PostgreSql.Host;
         PostgreSqlPort = settings.PostgreSql.Port;
         PostgreSqlDatabase = settings.PostgreSql.Database;
         PostgreSqlUsername = settings.PostgreSql.Username;
         PostgreSqlSslMode = settings.PostgreSql.SslMode;
-        PostgreSqlPassword = string.Empty;
+        try
+        {
+            PostgreSqlPassword =
+                _databaseCredentialStore.ReadPostgreSqlPassword(settings.PostgreSqlCredentialReference) ?? "";
+        }
+        catch (Exception ex)
+        {
+            PostgreSqlPassword = "";
+            Log.Warning(ex, "The saved database password could not be loaded");
+            ToastMessage =
+                "The saved database password could not be loaded. Enter it again to test or save the connection.";
+        }
         OnPropertyChanged(nameof(IsStorageProviderChanged));
         RaiseConnectionStateChanged();
     }
 
-    public void CancelDatabaseChanges()
+    public async Task CancelDatabaseChangesAsync()
     {
-        _isEditingConnection = false;
-        var settings = _appSettingsService.GetSettings();
-        if (settings.PendingDatabaseProvider.HasValue)
+        try
         {
-            settings.ClearPendingDatabaseSwitch();
-            _appSettingsService.SaveSettings(settings);
+            _isEditingConnection = false;
+            if (_appSettingsService.GetSettings().PendingDatabaseProvider.HasValue)
+            {
+                using var destinationLock = new DatabaseInstanceLock();
+                var switches = new DatabaseSwitchService(
+                    _appSettingsService,
+                    _databaseCredentialStore,
+                    destinationLock
+                );
+                if (await switches.CancelPendingSwitchAsync())
+                    ((App)Application.Current).Restart();
+            }
+            LoadDatabaseSettings(_appSettingsService.GetSettings());
         }
-        else
+        catch (Exception ex)
         {
-            LoadDatabaseSettings(settings);
+            ToastMessage = $"The pending change could not be canceled: {ex.Message}";
         }
-
-        RaiseConnectionStateChanged();
     }
 
     private PostgreSqlConnectionSettings ReadPostgreSqlSettings() =>
@@ -415,26 +441,16 @@ public class SettingsViewModel : ToastMessageViewModelBase
             SslMode = PostgreSqlSslMode,
         };
 
-    // A blank box means the user is changing something other than the password, so reuse the saved one.
-    private string ResolvePostgreSqlPassword()
-    {
-        if (!string.IsNullOrEmpty(PostgreSqlPassword))
-            return PostgreSqlPassword;
-
-        var saved = IsPostgreSqlActive ? _databaseCredentialStore.ReadPostgreSqlPassword() : null;
-        return string.IsNullOrEmpty(saved)
+    private string ReadPostgreSqlPassword() =>
+        string.IsNullOrEmpty(PostgreSqlPassword)
             ? throw new InvalidOperationException("Enter the PostgreSQL password")
-            : saved;
-    }
+            : PostgreSqlPassword;
 
     private async Task TestDatabaseConnectionAsync()
     {
         try
         {
-            await DatabaseConfigurationService.TestPostgreSqlAsync(
-                ReadPostgreSqlSettings(),
-                ResolvePostgreSqlPassword()
-            );
+            await DatabaseConfigurationService.TestPostgreSqlAsync(ReadPostgreSqlSettings(), ReadPostgreSqlPassword());
             ToastMessage = "Database connection successful.";
         }
         catch (Exception ex)
@@ -450,69 +466,59 @@ public class SettingsViewModel : ToastMessageViewModelBase
         try
         {
             var settings = _appSettingsService.GetSettings();
-            if (SelectedDatabaseProvider == DatabaseProvider.PostgreSql)
+            if (!settings.PendingDatabaseProvider.HasValue)
             {
-                var postgreSql = ReadPostgreSqlSettings();
-                var password = ResolvePostgreSqlPassword();
-                await DatabaseConfigurationService.TestPostgreSqlAsync(postgreSql, password);
-
-                if (_activeDatabaseProvider == DatabaseProvider.PostgreSql)
+                if (SelectedDatabaseProvider == DatabaseProvider.PostgreSql)
                 {
-                    var targetChanged = !DatabaseConfigurationService.IsSamePostgreSqlDatabase(
-                        postgreSql,
-                        _loadedPostgreSql
-                    );
-                    if (targetChanged)
-                        throw new InvalidOperationException(
-                            "Switch to SQLite before selecting a different PostgreSQL database"
+                    var postgreSql = ReadPostgreSqlSettings();
+                    var password = ReadPostgreSqlPassword();
+                    await DatabaseConfigurationService.TestPostgreSqlAsync(postgreSql, password);
+                    var copyHistory =
+                        settings.DatabaseProvider == DatabaseProvider.Sqlite
+                        || !DatabaseConfigurationService.IsSamePostgreSqlDatabase(settings.PostgreSql, postgreSql);
+                    if (copyHistory)
+                    {
+                        var source =
+                            settings.DatabaseProvider == DatabaseProvider.PostgreSql
+                                ? settings.PostgreSql.Describe()
+                                : "local SQLite";
+                        if (
+                            MessageBox.Show(
+                                $"Restart KeyPulse now and copy history from {source} to {postgreSql.Describe()}? "
+                                    + "Source history will be retained. Any existing KeyPulse history in the destination will be replaced.",
+                                AppConstants.App.DefaultName,
+                                MessageBoxButton.YesNo,
+                                MessageBoxImage.Warning,
+                                MessageBoxResult.No
+                            ) != MessageBoxResult.Yes
+                        )
+                            return;
+                        ConnectionSettings.SchedulePostgreSql(
+                            settings,
+                            postgreSql,
+                            password,
+                            copyHistory: true,
+                            replaceExisting: true
                         );
+                    }
+                    else
+                        ConnectionSettings.UpdateAuthentication(settings, postgreSql, password);
                 }
-
-                if (_activeDatabaseProvider == DatabaseProvider.Sqlite)
+                else if (settings.DatabaseProvider == DatabaseProvider.PostgreSql)
                 {
-                    var hasHistory = await DatabaseConfigurationService.HasReadableSqliteHistoryAsync();
-                    var message =
-                        $"Restart KeyPulse now and copy local history to PostgreSQL at {postgreSql.Host}:{postgreSql.Port}, database {postgreSql.Database}? "
-                        + "Any existing KeyPulse history in that database will be replaced. "
-                        + (
-                            hasHistory ? "The local SQLite file will be kept." : "The local history is currently empty."
-                        );
                     if (
                         MessageBox.Show(
-                            message,
+                            "Restart KeyPulse now and copy PostgreSQL history to SQLite? The current local database will be backed up and replaced with the copied history.",
                             AppConstants.App.DefaultName,
                             MessageBoxButton.YesNo,
-                            MessageBoxImage.Warning,
+                            MessageBoxImage.Information,
                             MessageBoxResult.No
                         ) != MessageBoxResult.Yes
                     )
                         return;
-                    settings.PendingDatabaseProvider = DatabaseProvider.PostgreSql;
-                    settings.PendingDatabaseImport = true;
-                    settings.PendingDatabaseReplace = true;
-                    settings.PendingDatabaseSwitchId = Guid.NewGuid().ToString("N");
+                    ConnectionSettings.ScheduleSqlite(settings);
                 }
-                _databaseCredentialStore.WritePostgreSqlPassword(password);
-                settings.PostgreSql = postgreSql;
             }
-            else if (_activeDatabaseProvider == DatabaseProvider.PostgreSql)
-            {
-                var answer = MessageBox.Show(
-                    "Restart KeyPulse now and copy PostgreSQL history to SQLite? The current local database will be backed up and replaced with the copied history.",
-                    AppConstants.App.DefaultName,
-                    MessageBoxButton.YesNo,
-                    MessageBoxImage.Information,
-                    MessageBoxResult.No
-                );
-                if (answer != MessageBoxResult.Yes)
-                    return;
-                settings.PendingDatabaseProvider = DatabaseProvider.Sqlite;
-                settings.PendingDatabaseImport = true;
-                settings.PendingDatabaseReplace = false;
-                settings.PendingDatabaseSwitchId = Guid.NewGuid().ToString("N");
-            }
-
-            _appSettingsService.SaveSettings(settings);
             saved = true;
             _isEditingConnection = false;
             RaiseConnectionStateChanged();
@@ -524,6 +530,7 @@ public class SettingsViewModel : ToastMessageViewModelBase
         }
         catch (Exception ex)
         {
+            saved |= _appSettingsService.GetSettings().PendingDatabaseProvider.HasValue;
             ToastMessage = saved
                 ? $"Database change saved, but restart failed: {ex.Message}. Close and reopen KeyPulse to finish."
                 : $"Database change failed: {ex.Message}";

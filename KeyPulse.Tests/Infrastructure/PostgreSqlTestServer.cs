@@ -77,20 +77,20 @@ public sealed class PostgreSqlTestServer : IAsyncLifetime
         return settings;
     }
 
-    internal PostgreSqlApplicationDbContext Open(PostgreSqlConnectionSettings settings) =>
-        ConfiguredDbContextFactory.CreatePostgreSqlContext(settings, "");
+    internal PostgreSqlApplicationDbContext Open(PostgreSqlConnectionSettings settings, string password = "") =>
+        ConfiguredDbContextFactory.CreatePostgreSqlContext(settings, password);
 
-    internal async Task CreateSchemaAsync(PostgreSqlConnectionSettings settings)
+    internal async Task CreateSchemaAsync(PostgreSqlConnectionSettings settings, string password = "")
     {
-        await using var context = Open(settings);
+        await using var context = Open(settings, password);
         await context.Database.MigrateAsync();
         AppMetaStore.EnsureTable(context);
     }
 
-    internal static async Task ExecuteAsync(PostgreSqlConnectionSettings settings, string sql)
+    internal static async Task ExecuteAsync(PostgreSqlConnectionSettings settings, string sql, string password = "")
     {
         await using var connection = new NpgsqlConnection(
-            DatabaseConfigurationService.BuildPostgreSqlConnectionString(settings, "")
+            DatabaseConfigurationService.BuildPostgreSqlConnectionString(settings, password)
         );
         await connection.OpenAsync();
         await using var command = new NpgsqlCommand(sql, connection);
@@ -106,6 +106,26 @@ public sealed class PostgreSqlTestServer : IAsyncLifetime
             Username = "keypulse_switch_test",
             SslMode = PostgreSqlSslMode.Disable,
         };
+
+    internal async Task<PostgreSqlConnectionSettings> CreatePasswordDatabaseAsync(string password)
+    {
+        var settings = await CreateDatabaseAsync();
+        var role = "owner_" + Guid.NewGuid().ToString("N");
+        await ExecuteAsync(
+            SettingsFor("postgres"),
+            $"CREATE ROLE \"{role}\" LOGIN PASSWORD '{password.Replace("'", "''")}'; ALTER DATABASE \"{settings.Database}\" OWNER TO \"{role}\";"
+        );
+        // Only this fixture's generated role and cluster are affected; admin fixture connections keep trust.
+        var hba = Path.Combine(_directory, "pg_hba.conf");
+        await File.WriteAllTextAsync(
+            hba,
+            $"host all {role} 127.0.0.1/32 scram-sha-256\nhost all {role} ::1/128 scram-sha-256\n"
+                + await File.ReadAllTextAsync(hba)
+        );
+        await ExecuteAsync(SettingsFor("postgres"), "SELECT pg_reload_conf();");
+        settings.Username = role;
+        return settings;
+    }
 
     public async Task DisposeAsync()
     {

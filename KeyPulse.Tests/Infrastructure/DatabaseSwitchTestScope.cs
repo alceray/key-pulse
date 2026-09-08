@@ -146,10 +146,30 @@ internal sealed class DatabaseSwitchTestScope : IDisposable
 internal sealed class FakeDatabaseCredentialStore : IDatabaseCredentialStore
 {
     internal string? Password { get; set; }
+    internal Dictionary<string, string> Entries { get; } = new();
+    internal bool FailDeletion { get; set; }
+    internal bool FailWriteAfterCreation { get; set; }
 
-    public string? ReadPostgreSqlPassword() => Password;
+    public string? ReadPostgreSqlPassword(string? credentialReference = null) =>
+        credentialReference == null ? Password : Entries.GetValueOrDefault(credentialReference);
 
-    public void WritePostgreSqlPassword(string password) => Password = password;
+    public void WritePostgreSqlPassword(string password, string? credentialReference = null)
+    {
+        if (credentialReference == null)
+            Password = password;
+        else
+            Entries[credentialReference] = password;
+        if (FailWriteAfterCreation)
+            throw new IOException("Injected credential write failure");
+    }
 
-    public void DeletePostgreSqlPassword() => Password = null;
+    public void DeletePostgreSqlPassword(string? credentialReference = null)
+    {
+        if (FailDeletion)
+            throw new IOException("Injected credential cleanup failure");
+        if (credentialReference == null)
+            Password = null;
+        else
+            Entries.Remove(credentialReference);
+    }
 }

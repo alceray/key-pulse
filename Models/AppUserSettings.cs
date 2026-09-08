@@ -29,6 +29,10 @@ public class AppUserSettings
     /// <summary>Non-secret PostgreSQL connection settings. The password is stored in Windows Credential Manager.</summary>
     public PostgreSqlConnectionSettings PostgreSql { get; set; } = new();
 
+    public string? PostgreSqlCredentialReference { get; set; }
+    public PostgreSqlConnectionSettings? PendingPostgreSql { get; set; }
+    public string? PendingPostgreSqlCredentialReference { get; set; }
+
     /// <summary>A provider switch that will be completed before monitoring starts on the next launch.</summary>
     public DatabaseProvider? PendingDatabaseProvider { get; set; }
 
@@ -47,5 +51,7 @@ public class AppUserSettings
         PendingDatabaseImport = false;
         PendingDatabaseReplace = false;
         PendingDatabaseSwitchId = null;
+        PendingPostgreSql = null;
+        PendingPostgreSqlCredentialReference = null;
     }
 }

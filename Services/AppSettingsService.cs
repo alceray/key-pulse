@@ -76,4 +76,12 @@ public class AppSettingsService
 
         handlers?.Invoke(settings);
     }
+
+    // Credential cleanup must fail closed when durable settings cannot be read.
+    internal AppUserSettings ReadPersistedSettings()
+    {
+        lock (_syncRoot)
+            return JsonSerializer.Deserialize<AppUserSettings>(File.ReadAllText(_settingsFilePath))
+                ?? throw new InvalidDataException("Saved settings are empty");
+    }
 }

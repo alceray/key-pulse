@@ -52,6 +52,7 @@ public class ThemeTests
                     "Click",
                     "Checked",
                     "PasswordChanged",
+                    "SelectionChanged",
                     "IsVisibleChanged",
                     "PreviewKeyDown",
                     "PreviewKeyUp",
@@ -116,13 +117,23 @@ public class ThemeTests
                 sample.CloseToTray = true;
                 sample.ShowCloseToTrayOption = true;
                 sample.AutoInstallUpdates = true;
-                sample.UseSqliteStorage = true;
-                sample.UsePostgreSqlStorage = false;
-                sample.IsSqliteActive = true;
-                sample.IsPostgreSqlActive = false;
+                sample.UseSqliteStorage = false;
+                sample.UsePostgreSqlStorage = true;
+                sample.IsSqliteActive = false;
+                sample.IsPostgreSqlActive = true;
                 sample.ShowPostgreSqlSummary = false;
-                sample.ShowPostgreSqlForm = false;
-                sample.ShowDatabaseActions = false;
+                sample.ShowPostgreSqlForm = true;
+                sample.ShowDatabaseActions = true;
+                sample.CanEditConnectionTarget = true;
+                sample.PostgreSqlHost = "localhost";
+                sample.PostgreSqlPort = 5432;
+                sample.PostgreSqlDatabase = "keypulse_test";
+                sample.PostgreSqlUsername = "keypulse";
+                sample.PostgreSqlSslModeChoices = Enum.GetValues<KeyPulse.Models.PostgreSqlSslMode>();
+                sample.PostgreSqlSslMode = KeyPulse.Models.PostgreSqlSslMode.Prefer;
+                if (name == "SettingsView")
+                    ((PasswordBox)((UserControl)gallery.Child).FindName("PostgreSqlPasswordBox")).Password =
+                        "sample-password";
                 sample.CurrentVersionDisplay = "KeyPulse Signal 1.3.2";
                 sample.UpdateActionButtonText = "Check for updates";
                 sample.RetentionChoices = KeyPulse.ViewModels.Settings.RetentionOptions.All;

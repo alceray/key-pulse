@@ -7,20 +7,29 @@ namespace KeyPulse.Services;
 
 public interface IDatabaseCredentialStore
 {
-    string? ReadPostgreSqlPassword();
-    void WritePostgreSqlPassword(string password);
-    void DeletePostgreSqlPassword();
+    string? ReadPostgreSqlPassword(string? credentialReference = null);
+    void WritePostgreSqlPassword(string password, string? credentialReference = null);
+    void DeletePostgreSqlPassword(string? credentialReference = null);
 }
 
 public sealed class WindowsDatabaseCredentialStore : IDatabaseCredentialStore
 {
     private const int CredentialTypeGeneric = 1;
     private const int CredentialPersistLocalMachine = 2;
-    private static string TargetName => $"{AppConstants.App.PostgreSqlCredentialPrefix}/{BuildInfo.EnvironmentName}";
 
-    public string? ReadPostgreSqlPassword()
+    internal static string TargetName(string? reference)
     {
-        if (!CredRead(TargetName, CredentialTypeGeneric, 0, out var credentialPointer))
+        var prefix = $"{AppConstants.App.PostgreSqlCredentialPrefix}/{BuildInfo.EnvironmentName}";
+        if (reference == null)
+            return prefix;
+        if (!Guid.TryParseExact(reference, "N", out _))
+            throw new InvalidOperationException("The saved database credential reference is invalid");
+        return $"{prefix}/{reference}";
+    }
+
+    public string? ReadPostgreSqlPassword(string? credentialReference = null)
+    {
+        if (!CredRead(TargetName(credentialReference), CredentialTypeGeneric, 0, out var credentialPointer))
         {
             var error = Marshal.GetLastWin32Error();
             if (error == 1168) // ERROR_NOT_FOUND
@@ -41,7 +50,7 @@ public sealed class WindowsDatabaseCredentialStore : IDatabaseCredentialStore
         }
     }
 
-    public void WritePostgreSqlPassword(string password)
+    public void WritePostgreSqlPassword(string password, string? credentialReference = null)
     {
         ArgumentNullException.ThrowIfNull(password);
         var blob = Marshal.StringToCoTaskMemUni(password);
@@ -50,7 +59,7 @@ public sealed class WindowsDatabaseCredentialStore : IDatabaseCredentialStore
             var credential = new NativeCredential
             {
                 Type = CredentialTypeGeneric,
-                TargetName = TargetName,
+                TargetName = TargetName(credentialReference),
                 CredentialBlobSize = (uint)(password.Length * sizeof(char)),
                 CredentialBlob = blob,
                 Persist = CredentialPersistLocalMachine,
@@ -66,9 +75,9 @@ public sealed class WindowsDatabaseCredentialStore : IDatabaseCredentialStore
         }
     }
 
-    public void DeletePostgreSqlPassword()
+    public void DeletePostgreSqlPassword(string? credentialReference = null)
     {
-        if (CredDelete(TargetName, CredentialTypeGeneric, 0))
+        if (CredDelete(TargetName(credentialReference), CredentialTypeGeneric, 0))
             return;
 
         var error = Marshal.GetLastWin32Error();

@@ -1,9 +1,8 @@
-﻿using System.IO;
+using System.IO;
 using System.Text.Json;
 using KeyPulse.Configuration;
 using KeyPulse.Data;
 using KeyPulse.Models;
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 
@@ -85,15 +84,6 @@ public sealed class DatabaseConfigurationService
         }
     }
 
-    internal static async Task<bool> HasReadableSqliteHistoryAsync(CancellationToken cancellationToken = default)
-    {
-        await using var context = ConfiguredDbContextFactory.CreateSqliteContext(
-            AppDataPaths.GetPath(AppConstants.Paths.DatabaseFileName),
-            SqliteOpenMode.ReadOnly
-        );
-        return await DatabaseSwitchService.HasApplicationDataAsync(context, cancellationToken);
-    }
-
     internal static bool IsSamePostgreSqlDatabase(
         PostgreSqlConnectionSettings left,
         PostgreSqlConnectionSettings right
@@ -109,8 +99,10 @@ public sealed class DatabaseConfigurationService
     )
     {
         EnsureNotUsedByOtherBuild(settings);
-        await using var connection = new NpgsqlConnection(BuildPostgreSqlConnectionString(settings, password));
-        await connection.OpenAsync(cancellationToken);
+        await using var source = ConfiguredDbContextFactory.CreatePostgreSqlContext(settings, password);
+        await DatabaseSwitchService.ValidateSourceSchemaAsync(source, cancellationToken);
+        await DatabaseSwitchService.HasApplicationDataAsync(source, cancellationToken);
+        AppMetaStore.ReadExisting(source);
     }
 
     internal static void EnsureNotUsedByOtherBuild(PostgreSqlConnectionSettings candidate)
@@ -125,32 +117,25 @@ public sealed class DatabaseConfigurationService
             if (other == null)
                 return;
 
-            var otherUsesPostgreSql =
-                other.DatabaseProvider == DatabaseProvider.PostgreSql
-                || other.PendingDatabaseProvider == DatabaseProvider.PostgreSql;
-            if (!otherUsesPostgreSql)
-                return;
-
-            var sameTarget =
-                candidate.Port == other.PostgreSql.Port
-                && string.Equals(
-                    candidate.Host.Trim(),
-                    other.PostgreSql.Host.Trim(),
-                    StringComparison.OrdinalIgnoreCase
-                )
-                && string.Equals(
-                    candidate.Database.Trim(),
-                    other.PostgreSql.Database.Trim(),
-                    StringComparison.OrdinalIgnoreCase
-                );
-            if (sameTarget)
-                throw new InvalidOperationException(
-                    $"That database is already configured for the other KeyPulse build. Use a separate {BuildInfo.EnvironmentName} database."
-                );
+            EnsureNotUsedByOtherBuild(candidate, other);
         }
         catch (JsonException)
         {
             // The other build will handle its own malformed settings; it cannot establish a known collision here.
         }
+    }
+
+    internal static void EnsureNotUsedByOtherBuild(PostgreSqlConnectionSettings candidate, AppUserSettings other)
+    {
+        var activeCollision =
+            other.DatabaseProvider == DatabaseProvider.PostgreSql
+            && IsSamePostgreSqlDatabase(candidate, other.PostgreSql);
+        var pendingCollision =
+            other.PendingDatabaseProvider == DatabaseProvider.PostgreSql
+            && IsSamePostgreSqlDatabase(candidate, other.PendingPostgreSql ?? other.PostgreSql);
+        if (activeCollision || pendingCollision)
+            throw new InvalidOperationException(
+                $"That database is already configured for the other KeyPulse build. Use a separate {BuildInfo.EnvironmentName} database."
+            );
     }
 }

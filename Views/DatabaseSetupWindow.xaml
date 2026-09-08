@@ -1,4 +1,4 @@
-﻿<Window
+<Window
   x:Class="KeyPulse.Views.DatabaseSetupWindow"
   Style="{StaticResource AppWindowStyle}"
   xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -29,6 +29,10 @@
     </StackPanel>
 
     <StackPanel Grid.Row="1" Margin="0,0,0,14">
+      <StackPanel x:Name="RecoveryConnectionPanel" Visibility="Collapsed" Margin="0,0,0,12">
+        <TextBlock Text="Connection to correct" Margin="0,0,0,4" />
+        <ComboBox x:Name="RecoveryConnectionComboBox" SelectionChanged="OnRecoveryConnectionChanged" />
+      </StackPanel>
       <RadioButton x:Name="SqliteRadio" Content="SQLite (recommended)" IsChecked="True" Checked="OnProviderChanged" />
       <TextBlock Margin="24,3,0,10" Text="Private local file, no setup required." Foreground="{DynamicResource SecondaryTextBrush}" />
       <RadioButton x:Name="PostgreSqlRadio" Content="PostgreSQL" Checked="OnProviderChanged" />
