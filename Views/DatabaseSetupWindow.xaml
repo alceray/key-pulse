@@ -15,6 +15,7 @@
       <RowDefinition Height="Auto" />
       <RowDefinition Height="Auto" />
       <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
     </Grid.RowDefinitions>
 
     <StackPanel Grid.Row="0" Margin="0,0,0,18">
@@ -79,7 +80,27 @@
 
     <TextBlock x:Name="StatusText" Grid.Row="3" Margin="0,0,0,14" TextWrapping="Wrap" Foreground="{DynamicResource SecondaryTextBrush}" />
 
-    <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right">
+    <StackPanel Grid.Row="4" Margin="0,0,0,14">
+      <Button
+        x:Name="CancelChangeButton"
+        Content="Cancel pending change"
+        Visibility="Collapsed"
+        HorizontalAlignment="Left"
+        Padding="10,4"
+        Margin="0,0,0,6"
+        Click="OnCancelChangeClick"
+      />
+      <Button
+        x:Name="UseLocalButton"
+        Content="Use local without copying"
+        Visibility="Collapsed"
+        HorizontalAlignment="Left"
+        Padding="10,4"
+        Click="OnUseLocalClick"
+      />
+    </StackPanel>
+
+    <StackPanel Grid.Row="5" Orientation="Horizontal" HorizontalAlignment="Right">
       <Button Content="Exit" Width="82" Margin="0,0,8,0" IsCancel="True" />
       <Button x:Name="ContinueButton" Content="Continue" Width="100" IsDefault="True" Click="OnContinueClick" />
     </StackPanel>

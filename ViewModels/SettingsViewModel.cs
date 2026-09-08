@@ -394,9 +394,7 @@ public class SettingsViewModel : ToastMessageViewModelBase
         var settings = _appSettingsService.GetSettings();
         if (settings.PendingDatabaseProvider.HasValue)
         {
-            settings.PendingDatabaseProvider = null;
-            settings.PendingDatabaseImport = false;
-            settings.PendingDatabaseSwitchId = null;
+            settings.ClearPendingDatabaseSwitch();
             _appSettingsService.SaveSettings(settings);
         }
         else
@@ -459,42 +457,58 @@ public class SettingsViewModel : ToastMessageViewModelBase
 
                 if (_activeDatabaseProvider == DatabaseProvider.PostgreSql)
                 {
-                    var targetChanged =
-                        postgreSql.Port != _loadedPostgreSql.Port
-                        || !string.Equals(postgreSql.Host, _loadedPostgreSql.Host, StringComparison.OrdinalIgnoreCase)
-                        || !string.Equals(
-                            postgreSql.Database,
-                            _loadedPostgreSql.Database,
-                            StringComparison.OrdinalIgnoreCase
-                        );
+                    var targetChanged = !DatabaseConfigurationService.IsSamePostgreSqlDatabase(
+                        postgreSql,
+                        _loadedPostgreSql
+                    );
                     if (targetChanged)
                         throw new InvalidOperationException(
                             "Switch to SQLite before selecting a different PostgreSQL database"
                         );
                 }
 
-                _databaseCredentialStore.WritePostgreSqlPassword(password);
-                settings.PostgreSql = postgreSql;
                 if (_activeDatabaseProvider == DatabaseProvider.Sqlite)
                 {
+                    var hasHistory = await DatabaseConfigurationService.HasReadableSqliteHistoryAsync();
+                    var message =
+                        $"Copy local history to PostgreSQL at {postgreSql.Host}:{postgreSql.Port}, database {postgreSql.Database}, after restart? "
+                        + "Any existing KeyPulse history in that database will be replaced. "
+                        + (
+                            hasHistory ? "The local SQLite file will be kept." : "The local history is currently empty."
+                        );
+                    if (
+                        MessageBox.Show(
+                            message,
+                            AppConstants.App.DefaultName,
+                            MessageBoxButton.YesNo,
+                            MessageBoxImage.Warning,
+                            MessageBoxResult.No
+                        ) != MessageBoxResult.Yes
+                    )
+                        return;
                     settings.PendingDatabaseProvider = DatabaseProvider.PostgreSql;
-                    settings.PendingDatabaseImport = DatabaseConfigurationService.HasSqliteHistory();
+                    settings.PendingDatabaseImport = true;
+                    settings.PendingDatabaseReplace = true;
                     settings.PendingDatabaseSwitchId = Guid.NewGuid().ToString("N");
                 }
+                _databaseCredentialStore.WritePostgreSqlPassword(password);
+                settings.PostgreSql = postgreSql;
             }
             else if (_activeDatabaseProvider == DatabaseProvider.PostgreSql)
             {
                 var answer = MessageBox.Show(
-                    "The local SQLite backup is older than the active PostgreSQL database. Switch after restart anyway?",
+                    "Copy PostgreSQL history to SQLite after restart? The current local database will be backed up and replaced with the copied history.",
                     AppConstants.App.DefaultName,
                     MessageBoxButton.YesNo,
-                    MessageBoxImage.Warning
+                    MessageBoxImage.Information,
+                    MessageBoxResult.No
                 );
                 if (answer != MessageBoxResult.Yes)
                     return;
                 settings.PendingDatabaseProvider = DatabaseProvider.Sqlite;
-                settings.PendingDatabaseImport = false;
-                settings.PendingDatabaseSwitchId = null;
+                settings.PendingDatabaseImport = true;
+                settings.PendingDatabaseReplace = false;
+                settings.PendingDatabaseSwitchId = Guid.NewGuid().ToString("N");
             }
 
             _appSettingsService.SaveSettings(settings);

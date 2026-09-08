@@ -14,10 +14,12 @@ public class AppSettingsService
     public event Action<AppUserSettings>? SettingsChanged;
 
     public AppSettingsService()
+        : this(AppDataPaths.GetPath(AppConstants.Paths.SettingsFileName)) { }
+
+    internal AppSettingsService(string settingsFilePath)
     {
-        var settingsDirectory = AppDataPaths.GetAppDataDirectory();
-        Directory.CreateDirectory(settingsDirectory);
-        _settingsFilePath = Path.Combine(settingsDirectory, AppConstants.Paths.SettingsFileName);
+        _settingsFilePath = Path.GetFullPath(settingsFilePath);
+        Directory.CreateDirectory(Path.GetDirectoryName(_settingsFilePath)!);
     }
 
     public AppUserSettings GetSettings()
@@ -46,16 +48,29 @@ public class AppSettingsService
 
         lock (_syncRoot)
         {
+            var temporaryPath = _settingsFilePath + "." + Guid.NewGuid().ToString("N") + ".tmp";
             try
             {
-                var json = JsonSerializer.Serialize(settings, JsonOptions);
-                File.WriteAllText(_settingsFilePath, json);
+                using (var stream = new FileStream(temporaryPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                {
+                    JsonSerializer.Serialize(stream, settings, JsonOptions);
+                    stream.Flush(flushToDisk: true);
+                }
+                if (File.Exists(_settingsFilePath))
+                    File.Replace(temporaryPath, _settingsFilePath, null);
+                else
+                    File.Move(temporaryPath, _settingsFilePath);
                 handlers = SettingsChanged;
             }
             catch (Exception ex)
             {
                 Log.Error(ex, "Failed to save settings");
                 throw;
+            }
+            finally
+            {
+                if (File.Exists(temporaryPath))
+                    File.Delete(temporaryPath);
             }
         }
 

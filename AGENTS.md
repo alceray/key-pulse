@@ -81,9 +81,11 @@ Injection
     - SQLite remains the default; first-run setup and Settings can select a dedicated PostgreSQL database
     - Non-secret PostgreSQL settings are build-isolated in `settings.json`; passwords use build-qualified Windows Credential Manager entries
     - `PostgreSqlApplicationDbContext` owns a separate PostgreSQL migration set under `Migrations/PostgreSql`
-    - Pending SQLite-to-PostgreSQL switches run before DI/monitoring, import in one target transaction, verify counts and totals, and retain SQLite as a frozen backup
+    - Provider switches run through one preflight/recovery loop before DI/monitoring and copy history in both directions. PostgreSQL replacement requires explicit confirmation. Transfers verify table counts and persisted-content fingerprints in one target transaction and preserve retention metadata.
+    - PostgreSQL-to-SQLite exports use a staging file, a verified `.pre-import` backup in `DbBackups`, and a checkpointed file replacement. SQLite timestamp migration markers prevent repeated UTC conversion.
+    - The PostgreSQL advisory lock spans transfer and activation, then transfers to DI ownership when PostgreSQL stays active. Settings are published atomically. Destination-local `DatabaseImportSwitchId` markers make retries complete activation without recopying, including empty histories.
     - Debug and Release must use separate PostgreSQL databases; a PostgreSQL advisory lock prevents concurrent KeyPulse writers
-    - See: `Services/DatabaseSwitchService.cs`, `Data/ConfiguredDbContextFactory.cs`
+    - See: `Services/Database/DatabaseSwitchService.cs`, `Services/Database/SqliteHistoryFile.cs`, `Data/ConfiguredDbContextFactory.cs`
 
 ### Data Persistence Model
 
@@ -104,6 +106,7 @@ Injection
 1. Register unhandled-exception cleanup hooks.
 2. Mutex check (single-instance enforcement). If another instance exists, signal it to restore/focus and exit.
 3. Resolve first-run database selection, pending imports, and PostgreSQL connection recovery before capture can start.
+   The application starts with explicit shutdown so closing setup/recovery dialogs cannot end startup during an await. Cancellation exits explicitly; the foreground/tray shutdown policy is applied after preflight.
 4. Resolve startup mode from build configuration (Debug foreground, Release tray), with launch args able to force tray mode, then build the DI container.
 5. Resolve `UsbMonitorService` (which also resolves `DataService`). During construction:
     - database migrations run,
@@ -236,6 +239,14 @@ Device state management is centralized in `UsbMonitorService.AddDeviceEvent()`:
 
 ## Workflows & Commands
 
+### TODO Planning
+
+- Every TODO created or substantively updated must include a **code churn estimate**.
+- Estimate affected file counts and lines added/deleted as ranges, separating implementation, tests,
+  and documentation where useful. State the main assumptions and update the estimate if scope changes.
+- Label estimates clearly; do not present them as measured diffs. For tasks without code changes,
+  state that code churn is zero and describe the expected documentation or asset changes instead.
+
 ### Database Migrations (via EF Core CLI in Developer PowerShell)
 
 ```powershell
@@ -361,6 +372,7 @@ dotnet ef database update SomeOlderMigrationName
 - `LocalDayToUtc(DateOnly)` — converts a local day to its UTC start boundary for inclusive range queries.
 - `NormalizeUtcMinute(DateTime)` — converts to UTC then truncates to minute boundary; used by `DailyStatsService` projector.
 - `TruncateToMinute(DateTime)` — truncates to minute while preserving `DateTimeKind`; used by `RawInputService` for local-time minute buckets. **Not interchangeable with `NormalizeUtcMinute`.**
+- Timestamp truncation uses tick arithmetic to preserve the distinction between the two occurrences of a local clock time when daylight saving time ends. Do not reconstruct local timestamps from calendar components in the truncation helpers.
 
 ### Status Message Pattern
 

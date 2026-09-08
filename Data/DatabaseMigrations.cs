@@ -24,6 +24,21 @@ internal static class DatabaseMigrations
         MigratePersistedTimesToSecondPrecisionIfNeeded(ctx);
     }
 
+    internal static void AddTimestampMigrationMarkers(IDictionary<string, string> metadata)
+    {
+        metadata[UtcTimestampMigrationMarkerKey] = "done";
+        metadata[TimestampSecondPrecisionMigrationMarkerKey] = "done";
+    }
+
+    public static void MarkTimestampMigrationsApplied(ApplicationDbContext ctx)
+    {
+        AppMetaStore.EnsureTable(ctx);
+        var markers = new Dictionary<string, string>();
+        AddTimestampMigrationMarkers(markers);
+        foreach (var (key, value) in markers)
+            AppMetaStore.Write(ctx, key, value);
+    }
+
     private static void MigratePersistedTimesToUtcIfNeeded(ApplicationDbContext ctx)
     {
         RunOneTimeSqlMigration(

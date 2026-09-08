@@ -3,6 +3,7 @@ using System.Text.Json;
 using KeyPulse.Configuration;
 using KeyPulse.Data;
 using KeyPulse.Models;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 
@@ -82,6 +83,34 @@ public sealed class DatabaseConfigurationService
             // A database that cannot yet be inspected must not be treated as disposable.
             return true;
         }
+    }
+
+    internal static async Task<bool> HasReadableSqliteHistoryAsync(CancellationToken cancellationToken = default)
+    {
+        await using var context = ConfiguredDbContextFactory.CreateSqliteContext(
+            AppDataPaths.GetPath(AppConstants.Paths.DatabaseFileName),
+            SqliteOpenMode.ReadOnly
+        );
+        return await DatabaseSwitchService.HasApplicationDataAsync(context, cancellationToken);
+    }
+
+    internal static bool IsSamePostgreSqlDatabase(
+        PostgreSqlConnectionSettings left,
+        PostgreSqlConnectionSettings right
+    ) =>
+        left.Port == right.Port
+        && string.Equals(left.Host.Trim(), right.Host.Trim(), StringComparison.OrdinalIgnoreCase)
+        && string.Equals(left.Database.Trim(), right.Database.Trim(), StringComparison.Ordinal);
+
+    internal static async Task TestPostgreSqlReadAsync(
+        PostgreSqlConnectionSettings settings,
+        string password,
+        CancellationToken cancellationToken = default
+    )
+    {
+        EnsureNotUsedByOtherBuild(settings);
+        await using var connection = new NpgsqlConnection(BuildPostgreSqlConnectionString(settings, password));
+        await connection.OpenAsync(cancellationToken);
     }
 
     internal static void EnsureNotUsedByOtherBuild(PostgreSqlConnectionSettings candidate)

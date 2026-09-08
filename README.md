@@ -63,7 +63,7 @@ KeyPulse records activity totals, not the content of your input. It does not rec
 | Release | `%AppData%\KeyPulse Signal\keypulse-data.db` |
 | Debug | `%AppData%\KeyPulse Signal\Test\keypulse-data.db` |
 
-Debug and Release keep independent settings, credentials, SQLite files, and PostgreSQL databases. Switching from SQLite imports existing history transactionally after restart. The SQLite file remains as a frozen backup.
+Debug and Release keep independent settings, credentials, SQLite files, and PostgreSQL databases. Provider changes copy the active history after restart, before monitoring begins. Switching to PostgreSQL asks you to confirm replacing any existing KeyPulse history there. Switching to SQLite verifies a fresh local database and saves the previous local history in `DbBackups`. Repeated switches are supported, and interrupted transfers resume safely.
 
 The database stores device snapshots, connection events, minute-level activity snapshots, and daily aggregates. Retention settings only prune old minute-level detail. Your daily history and connection totals stay intact.
 
@@ -76,9 +76,15 @@ CREATE ROLE keypulse LOGIN PASSWORD 'choose-a-password';
 CREATE DATABASE keypulse_signal OWNER keypulse;
 ```
 
-Those names are only the defaults shown in the form. Any database and role work, as long as the database is empty and the role can create tables in its `public` schema. Making the role the owner is the simplest way to grant that. PostgreSQL 15 and later no longer let a non-owner create tables in `public`, so a role you do not own the database with also needs `GRANT CREATE, USAGE ON SCHEMA public`.
+Those names are only the defaults shown in the form. Use a dedicated database and a role that can manage its KeyPulse tables in the `public` schema. Making the role the owner is the simplest way to grant that. First-run setup requires an empty destination. Later switches from Settings can replace existing KeyPulse history after confirmation. PostgreSQL 15 and later no longer let a non-owner create tables in `public`, so a role you do not own the database with also needs `GRANT CREATE, USAGE ON SCHEMA public`.
 
 Then open Settings, choose PostgreSQL, and fill in the host, port, database, user, and password. Test confirms both that the role can sign in and that it can create the schema. Apply saves the password to Windows Credential Manager and stages the switch. The move itself runs on the next start, before monitoring begins, so restart the app to complete it.
+
+If startup cannot complete a transfer, recovery offers retry and cancellation. An explicit **Use local without copying** option lets you leave an unavailable PostgreSQL database behind. Its history remains on the server, and the local history may be older or empty. A normal provider change always copies history.
+
+Before switching to SQLite, disconnect the local SQLite database in tools such as Rider or DB Browser for SQLite. An idle connection can prevent replacing the file even when no query is running. If recovery reports that the local database is in use, disconnect those tools and choose **Retry** to finish copying history.
+
+To run provider integration tests, set `KEYPULSE_TEST_POSTGRES_BIN` to the directory containing `initdb.exe` and `pg_ctl.exe`, then run `dotnet test "KeyPulse Signal.sln"`. The tests create a temporary PostgreSQL cluster on a free loopback port and remove it afterward. They do not connect to your configured database. Without that variable, PostgreSQL integration tests are skipped and SQLite tests still run.
 
 Contributors who run both builds need a second database, since Debug and Release refuse to share one. Create `keypulse_signal_test` the same way and point the Debug build at it.
 

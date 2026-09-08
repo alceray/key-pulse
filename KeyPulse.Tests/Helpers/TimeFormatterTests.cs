@@ -9,6 +9,19 @@ namespace KeyPulse.Tests.Helpers;
 /// </summary>
 public class TimeFormatterTests
 {
+    [Theory]
+    [InlineData(5)]
+    [InlineData(6)]
+    public void Truncation_PreservesDaylightSavingOccurrence(int utcHour)
+    {
+        var utc = new DateTime(2025, 11, 2, utcHour, 30, 45, DateTimeKind.Utc).AddTicks(1234567);
+        utc.ToLocalTime().TruncateToSecond().ToUniversalTime().ShouldBe(utc.AddTicks(-1234567));
+        utc.ToLocalTime()
+            .TruncateToMinute()
+            .ToUniversalTime()
+            .ShouldBe(new DateTime(2025, 11, 2, utcHour, 30, 0, DateTimeKind.Utc));
+    }
+
     // ── TruncateToMinute: zeroes sub-minute components, PRESERVES DateTimeKind ──
 
     [Theory]

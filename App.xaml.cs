@@ -1,4 +1,4 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 using System.IO;
 using System.Windows;
 using KeyPulse.Configuration;
@@ -33,6 +33,13 @@ public partial class App
     private string? _promptedVersion;
     public static bool RunInBackground { get; private set; }
     public static ServiceProvider ServiceProvider { get; private set; } = null!;
+
+    public App()
+    {
+        // Setup/recovery can close the only window before an awaited database operation finishes.
+        // Keep the app alive until preflight completes and the foreground/tray policy is applied.
+        ShutdownMode = ShutdownMode.OnExplicitShutdown;
+    }
 
     protected override async void OnStartup(StartupEventArgs e)
     {
@@ -96,64 +103,28 @@ public partial class App
             showedInitialDatabaseSetup = true;
         }
 
-        var switchService = new DatabaseSwitchService(preflightSettingsService, preflightCredentialStore);
-        while (preflightSettingsService.GetSettings().PendingDatabaseProvider.HasValue)
-        {
-            try
-            {
-                await switchService.ProcessPendingSwitchAsync();
-            }
-            catch (Exception ex)
-            {
-                Log.Error(ex, "Pending database switch failed");
-                var recoveryWindow = new DatabaseSetupWindow(
-                    _appName,
-                    preflightSettingsService,
-                    preflightCredentialStore,
-                    recoveryMode: true,
-                    failureMessage: ex.Message
-                );
-                if (recoveryWindow.ShowDialog() != true)
-                {
-                    Shutdown();
-                    return;
-                }
-            }
-        }
-
         var databaseInstanceLock = new DatabaseInstanceLock();
-        while (preflightSettingsService.GetSettings().DatabaseProvider == DatabaseProvider.PostgreSql)
+        var switchService = new DatabaseSwitchService(
+            preflightSettingsService,
+            preflightCredentialStore,
+            databaseInstanceLock
+        );
+        var databaseReady = await switchService.PrepareStartupAsync(ex =>
         {
-            try
-            {
-                var current = preflightSettingsService.GetSettings();
-                var password =
-                    preflightCredentialStore.ReadPostgreSqlPassword()
-                    ?? throw new InvalidOperationException("The saved PostgreSQL password is unavailable");
-                await DatabaseConfigurationService.TestPostgreSqlAsync(current.PostgreSql, password);
-
-                // Claimed here so a second instance is reported in the setup dialog instead of crashing later.
-                databaseInstanceLock.Acquire(
-                    DatabaseConfigurationService.BuildPostgreSqlConnectionString(current.PostgreSql, password)
-                );
-                break;
-            }
-            catch (Exception ex)
-            {
-                Log.Error(ex, "Configured PostgreSQL database is unavailable");
-                var recoveryWindow = new DatabaseSetupWindow(
-                    _appName,
-                    preflightSettingsService,
-                    preflightCredentialStore,
-                    recoveryMode: true,
-                    failureMessage: ex.Message
-                );
-                if (recoveryWindow.ShowDialog() != true)
-                {
-                    Shutdown();
-                    return;
-                }
-            }
+            var recoveryWindow = new DatabaseSetupWindow(
+                _appName,
+                preflightSettingsService,
+                preflightCredentialStore,
+                recoveryMode: true,
+                failureMessage: ex.Message,
+                switchService: switchService
+            );
+            return recoveryWindow.ShowDialog() == true;
+        });
+        if (!databaseReady)
+        {
+            Shutdown();
+            return;
         }
 
         var services = new ServiceCollection();
@@ -299,7 +270,7 @@ public partial class App
             return;
         }
 
-        ShutdownDispose.TryStep(ServiceProvider.Dispose, "service provider dispose");
+        ShutdownDispose.TryStep(() => ServiceProvider?.Dispose(), "service provider dispose");
     }
 
     protected override void OnSessionEnding(SessionEndingCancelEventArgs e)
@@ -315,7 +286,7 @@ public partial class App
         services.AddSingleton<ThemeService>();
         services.AddSingleton<IDatabaseCredentialStore, WindowsDatabaseCredentialStore>();
         services.AddSingleton<IDbContextFactory<ApplicationDbContext>, ConfiguredDbContextFactory>();
-        services.AddSingleton(databaseInstanceLock);
+        services.AddSingleton(_ => databaseInstanceLock);
         services.AddSingleton<DailyStatsService>();
         services.AddSingleton<DataService>();
         services.AddSingleton<LogAccessService>();

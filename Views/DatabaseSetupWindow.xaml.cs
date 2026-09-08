@@ -10,13 +10,15 @@ public partial class DatabaseSetupWindow : Window
     private readonly AppSettingsService _settingsService;
     private readonly IDatabaseCredentialStore _credentialStore;
     private readonly bool _recoveryMode;
+    private readonly DatabaseSwitchService? _switchService;
 
     public DatabaseSetupWindow(
         string caption,
         AppSettingsService settingsService,
         IDatabaseCredentialStore credentialStore,
         bool recoveryMode = false,
-        string? failureMessage = null
+        string? failureMessage = null,
+        DatabaseSwitchService? switchService = null
     )
     {
         InitializeComponent();
@@ -24,6 +26,7 @@ public partial class DatabaseSetupWindow : Window
         _settingsService = settingsService;
         _credentialStore = credentialStore;
         _recoveryMode = recoveryMode;
+        _switchService = switchService;
         SslModeComboBox.ItemsSource = Enum.GetValues<PostgreSqlSslMode>();
 
         var settings = settingsService.GetSettings();
@@ -40,9 +43,17 @@ public partial class DatabaseSetupWindow : Window
 
         if (recoveryMode)
         {
-            HeadingText.Text = "Database connection required";
+            HeadingText.Text = "Database startup needs attention";
             DescriptionText.Text =
-                "KeyPulse cannot reach its PostgreSQL database. Update the connection and retry, or explicitly switch to the local SQLite backup.";
+                "KeyPulse could not finish opening or moving its history. Retry after correcting the problem, or choose a recovery option below.";
+            ContinueButton.Content = "Retry";
+            CancelChangeButton.Visibility = settings.PendingDatabaseProvider.HasValue
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+            UseLocalButton.Visibility =
+                settings.DatabaseProvider == DatabaseProvider.PostgreSql ? Visibility.Visible : Visibility.Collapsed;
+            if (switchService == null)
+                throw new ArgumentNullException(nameof(switchService));
         }
 
         if (!string.IsNullOrWhiteSpace(failureMessage))
@@ -80,7 +91,10 @@ public partial class DatabaseSetupWindow : Window
     {
         await RunPostgreSqlActionAsync(async () =>
         {
-            await DatabaseConfigurationService.TestPostgreSqlAsync(ReadPostgreSqlSettings(), ReadPassword());
+            if (_settingsService.GetSettings().PendingDatabaseProvider == DatabaseProvider.Sqlite)
+                await DatabaseConfigurationService.TestPostgreSqlReadAsync(ReadPostgreSqlSettings(), ReadPassword());
+            else
+                await DatabaseConfigurationService.TestPostgreSqlAsync(ReadPostgreSqlSettings(), ReadPassword());
             StatusText.Text = "Connection successful.";
         });
     }
@@ -89,49 +103,78 @@ public partial class DatabaseSetupWindow : Window
     {
         try
         {
-            ContinueButton.IsEnabled = false;
-            TestButton.IsEnabled = false;
+            SetBusy(true);
             var settings = _settingsService.GetSettings();
+
+            if (
+                _recoveryMode
+                && settings.PendingDatabaseProvider == DatabaseProvider.Sqlite
+                && await _switchService!.TryCompletePendingSwitchAsync()
+            )
+            {
+                DialogResult = true;
+                return;
+            }
 
             if (SqliteRadio.IsChecked == true)
             {
                 if (_recoveryMode && settings.DatabaseProvider == DatabaseProvider.PostgreSql)
                 {
                     var answer = MessageBox.Show(
-                        "The local SQLite database has not received data since PostgreSQL was activated. Switch anyway?",
+                        "Copy PostgreSQL history to SQLite now? The current local database will be backed up and replaced with the copied history.",
                         Title,
                         MessageBoxButton.YesNo,
-                        MessageBoxImage.Warning
+                        MessageBoxImage.Information,
+                        MessageBoxResult.No
                     );
                     if (answer != MessageBoxResult.Yes)
                         return;
+                    settings.PendingDatabaseProvider = DatabaseProvider.Sqlite;
+                    settings.PendingDatabaseImport = true;
+                    settings.PendingDatabaseReplace = false;
+                    settings.PendingDatabaseSwitchId ??= Guid.NewGuid().ToString("N");
                 }
-
-                settings.DatabaseProvider = DatabaseProvider.Sqlite;
-                settings.PendingDatabaseProvider = null;
-                settings.PendingDatabaseImport = false;
-                settings.PendingDatabaseSwitchId = null;
+                else if (_recoveryMode)
+                {
+                    await _switchService!.CancelPendingSwitchAsync();
+                    DialogResult = true;
+                    return;
+                }
+                else
+                {
+                    settings.DatabaseProvider = DatabaseProvider.Sqlite;
+                    settings.ClearPendingDatabaseSwitch();
+                }
             }
             else
             {
                 var postgreSql = ReadPostgreSqlSettings();
                 var password = ReadPassword();
-                StatusText.Text = "Testing connection…";
-                await DatabaseConfigurationService.TestPostgreSqlAsync(postgreSql, password);
+                StatusText.Text = "Testing connection...";
+                if (_recoveryMode && settings.PendingDatabaseProvider.HasValue)
+                {
+                    if (!DatabaseConfigurationService.IsSamePostgreSqlDatabase(settings.PostgreSql, postgreSql))
+                        throw new InvalidOperationException(
+                            "Cancel the pending change before selecting a different database"
+                        );
+                    await DatabaseConfigurationService.TestPostgreSqlReadAsync(postgreSql, password);
+                }
+                else
+                    await DatabaseConfigurationService.TestPostgreSqlAsync(postgreSql, password);
                 _credentialStore.WritePostgreSqlPassword(password);
                 settings.PostgreSql = postgreSql;
 
-                if (_recoveryMode && settings.DatabaseProvider == DatabaseProvider.PostgreSql)
-                {
-                    // Recovery edits the active connection; it has already been tested successfully.
-                    settings.PendingDatabaseProvider = null;
-                    settings.PendingDatabaseImport = false;
-                    settings.PendingDatabaseSwitchId = null;
-                }
-                else
+                if (
+                    !_recoveryMode
+                    || (
+                        !settings.PendingDatabaseProvider.HasValue
+                        && settings.DatabaseProvider != DatabaseProvider.PostgreSql
+                    )
+                )
                 {
                     settings.PendingDatabaseProvider = DatabaseProvider.PostgreSql;
                     settings.PendingDatabaseImport = DatabaseConfigurationService.HasSqliteHistory();
+                    settings.PendingDatabaseReplace = false;
                     settings.PendingDatabaseSwitchId = Guid.NewGuid().ToString("N");
                 }
             }
@@ -147,8 +190,7 @@ public partial class DatabaseSetupWindow : Window
         }
         finally
         {
-            ContinueButton.IsEnabled = true;
-            TestButton.IsEnabled = true;
+            SetBusy(false);
         }
     }
 
@@ -156,20 +198,52 @@ public partial class DatabaseSetupWindow : Window
     {
         try
         {
-            TestButton.IsEnabled = false;
-            ContinueButton.IsEnabled = false;
-            StatusText.Text = "Testing connection…";
+            SetBusy(true);
+            StatusText.Text = "Checking database...";
             await action();
         }
         catch (Exception ex)
         {
             StatusText.Text = ex.Message;
-            Log.Debug(ex, "PostgreSQL connection test failed");
+            Log.Debug(ex, "Database recovery or connection check failed");
         }
         finally
         {
-            TestButton.IsEnabled = true;
-            ContinueButton.IsEnabled = true;
+            SetBusy(false);
         }
+    }
+
+    private void SetBusy(bool busy)
+    {
+        TestButton.IsEnabled = !busy;
+        ContinueButton.IsEnabled = !busy;
+        CancelChangeButton.IsEnabled = !busy;
+        UseLocalButton.IsEnabled = !busy;
+    }
+
+    private async void OnCancelChangeClick(object sender, RoutedEventArgs e) => await RunRecoveryActionAsync(false);
+
+    private async void OnUseLocalClick(object sender, RoutedEventArgs e)
+    {
+        if (
+            MessageBox.Show(
+                "Use SQLite without copying PostgreSQL history? The local file may be older or empty. History stored only in PostgreSQL will remain there.",
+                Title,
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning,
+                MessageBoxResult.No
+            ) != MessageBoxResult.Yes
+        )
+            return;
+        await RunRecoveryActionAsync(true);
+    }
+
+    private async Task RunRecoveryActionAsync(bool useLocalWithoutCopying)
+    {
+        await RunPostgreSqlActionAsync(async () =>
+        {
+            await _switchService!.CancelPendingSwitchAsync(useLocalWithoutCopying);
+            DialogResult = true;
+        });
     }
 }

@@ -70,6 +70,35 @@ public class DbContextConverterTests : IDisposable
         }
     }
 
+    [Fact]
+    public void RepeatedDaylightSavingHour_PreservesBothInstantsWhenReadAndSavedAgain()
+    {
+        var first = new DateTime(2025, 11, 2, 5, 30, 0, DateTimeKind.Utc);
+        var second = first.AddHours(1);
+        using (var context = _db.CreateContext())
+        {
+            context.ActivitySnapshots.AddRange(
+                new ActivitySnapshot { DeviceId = "D1", Minute = first },
+                new ActivitySnapshot { DeviceId = "D1", Minute = second }
+            );
+            context.SaveChanges();
+        }
+        using (var context = _db.CreateContext())
+        {
+            var rows = context.ActivitySnapshots.OrderBy(x => x.ActivitySnapshotId).ToArray();
+            rows.Select(x => x.Minute.ToUniversalTime()).ShouldBe(new[] { first, second });
+            foreach (var row in rows)
+                context.Entry(row).Property(x => x.Minute).IsModified = true;
+            context.SaveChanges();
+        }
+        using (var context = _db.CreateContext())
+            context
+                .ActivitySnapshots.OrderBy(x => x.ActivitySnapshotId)
+                .AsEnumerable()
+                .Select(x => x.Minute.ToUniversalTime())
+                .ShouldBe(new[] { first, second });
+    }
+
     // ── HourlyInputCount JSON converter (via DailyDeviceStat) ──────────────────
 
     [Fact]
