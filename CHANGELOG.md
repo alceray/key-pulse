@@ -33,6 +33,8 @@ All notable changes to this project are documented in this file.
 - Notifications not refreshing for newer updates.
 
 ## [1.3.1] - 2026-07-14
+> ⚠️ Automatic updating is broken in this version.                                                                                                                                                                                                                                                         
+> Download and run a v1.3.2+ installer over your current installation. Do not uninstall first - settings and activity history will be preserved.
 
 ### Added
 
@@ -40,6 +42,8 @@ All notable changes to this project are documented in this file.
 - Suggestions when a device may have the wrong type.
 
 ## [1.3.0] - 2026-06-19
+> ⚠️ Automatic updating is broken in this version.                                                                                                                                                                                                                                                         
+> Download and run a v1.3.2+ installer over your current installation. Do not uninstall first - settings and activity history will be preserved.
 
 ### Added
 
