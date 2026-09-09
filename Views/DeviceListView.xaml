@@ -165,7 +165,7 @@
           Width="Auto"
         />
         <DataGridTextColumn Header="Days Connected" Binding="{Binding DaysConnected}" Width="Auto" />
-        <DataGridTextColumn Header="Total Inputs" Binding="{Binding TotalInputCount}" Width="Auto" />
+        <DataGridTextColumn Header="Total Inputs" Binding="{Binding TotalInputCount, StringFormat={}{0:N0}}" Width="Auto" />
       </DataGrid.Columns>
       <DataGrid.ContextMenu>
         <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
