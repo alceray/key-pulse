@@ -165,7 +165,20 @@
           Width="Auto"
         />
         <DataGridTextColumn Header="Days Connected" Binding="{Binding DaysConnected}" Width="Auto" />
-        <DataGridTextColumn Header="Total Inputs" Binding="{Binding TotalInputCount, StringFormat={}{0:N0}}" Width="Auto" />
+        <DataGridTextColumn Header="Total Inputs" Binding="{Binding TotalInputCount, StringFormat={}{0:N0}}" Width="Auto">
+          <DataGridTextColumn.HeaderTemplate>
+            <DataTemplate>
+              <StackPanel Orientation="Horizontal">
+                <TextBlock Text="{Binding}" VerticalAlignment="Center" />
+                <local:InfoHint
+                  Text="Keyboard inputs count keystrokes. Mouse inputs count clicks plus seconds of movement."
+                  Margin="6,0,0,0"
+                  VerticalAlignment="Center"
+                />
+              </StackPanel>
+            </DataTemplate>
+          </DataGridTextColumn.HeaderTemplate>
+        </DataGridTextColumn>
       </DataGrid.Columns>
       <DataGrid.ContextMenu>
         <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
