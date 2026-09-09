@@ -1,10 +1,10 @@
 ﻿# New-Release.ps1
 # Tags and pushes a release in one step, triggering the GitHub Actions release workflow.
-# Usage: .\scripts\New-Release.ps1 -Version "1.2.0"
+# Usage: .\scripts\New-Release.ps1 [-Version "1.2.0"]
+# If -Version is omitted, the Version in KeyPulse.csproj is used.
 
 param(
-    [Parameter(Mandatory = $true)]
-    [string]$Version
+    [string]$Version = ""
 )
 
 Set-StrictMode -Version Latest
@@ -12,6 +12,16 @@ $ErrorActionPreference = "Stop"
 
 $root = Split-Path $PSScriptRoot -Parent
 Set-Location $root
+
+if (-not $Version) {
+    [xml]$project = Get-Content -LiteralPath (Join-Path $root "KeyPulse.csproj") -Raw
+    $versionNode = $project.SelectSingleNode('/Project/PropertyGroup/Version')
+    if ($null -eq $versionNode -or [string]::IsNullOrWhiteSpace($versionNode.InnerText)) {
+        throw "KeyPulse.csproj has no Version value. Set it or pass -Version explicitly."
+    }
+    $Version = $versionNode.InnerText.Trim()
+    Write-Host "Using project version: $Version" -ForegroundColor Cyan
+}
 
 $tag = "v$Version"
 
@@ -21,17 +31,22 @@ if ($status) {
     throw "Working tree is not clean. Commit or stash changes before releasing.`n$status"
 }
 
-# Delete existing tag if it exists (local and remote)
+# Confirm the release before changing local or remote tags.
 $existing = git tag --list $tag
 if ($existing) {
     Write-Host "Tag '$tag' already exists locally." -ForegroundColor Yellow
-    $confirmation = Read-Host "Delete existing tag and create a new one? (y/n)"
-    
-    if ($confirmation -ne "y" -and $confirmation -ne "Y" -and $confirmation -ne "") {
-        Write-Host "Release cancelled." -ForegroundColor Yellow
-        exit 0
-    }
-    
+    $confirmation = Read-Host "Replace '$tag' locally and on origin, then publish this release? [y/N]"
+} else {
+    $confirmation = Read-Host "Create and push '$tag' to origin to publish this release? [y/N]"
+}
+
+if ($confirmation -notmatch '^(y|yes)$') {
+    Write-Host "Release cancelled." -ForegroundColor Yellow
+    return
+}
+
+# Delete an existing tag only after replacement has been confirmed.
+if ($existing) {
     Write-Host "Deleting local tag..." -ForegroundColor Yellow
     git tag -d $tag
     if ($LASTEXITCODE -ne 0) { throw "Failed to delete local tag." }

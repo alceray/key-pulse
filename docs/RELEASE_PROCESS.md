@@ -33,13 +33,16 @@ Pushing a version tag triggers the release workflow (`.github/workflows/release.
    changes. The changelog's section headings are the quickest tell — any `### Added` entries mean a
    minor, not a patch.
 2. Add the matching `## [<version>] - <date>` entry to `CHANGELOG.md`, and bump `Version` /
-   `FileVersion` in `KeyPulse.csproj` to keep the developer-default in sync (optional but tidy).
+   `FileVersion` in `KeyPulse.csproj` for the new release.
 3. Commit and push.
 4. Push a version tag with the helper script:
    ```powershell
-   .\scripts\New-Release.ps1 -Version "1.2.0"
+   .\scripts\New-Release.ps1
    ```
-5. The script validates a clean working tree and prevents duplicate tags.
+   The script uses `Version` from `KeyPulse.csproj`. Pass `-Version "1.2.0"` to override it.
+5. The script validates a clean working tree and asks you to confirm the release version before
+   tagging or pushing. Enter `y` or `yes` to continue; Enter alone cancels. If the tag already exists
+   locally, the confirmation explicitly asks to replace it locally and on origin.
 6. GitHub Actions builds and publishes the release automatically.
 
 Manual fallback:
