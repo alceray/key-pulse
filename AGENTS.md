@@ -305,7 +305,7 @@ dotnet ef database update SomeOlderMigrationName
 | `ViewModels/` | MVVM viewmodels for each UI view; `StatusMessageViewModelBase` provides shared status toast behavior. `Dashboard/` and `Calendar/` subfolders hold the chart/pie/color builders, DTOs, and per-view helpers extracted from the larger view-models |
 | `Views/`      | XAML + code-behind for UI; `StatusMessagePanel` is a reusable status toast control; `SharedConverters.cs` holds shared `IValueConverter`s (e.g. `InverseBoolToVisibilityConverter`, `DurationSecondsConverter`); `Styles/AppStyles.xaml` holds the app-wide control styles |
 | `Migrations/` | EF Core snapshot migrations (read-only; auto-generated)                                                          |
-| `docs/`       | release docs, production-readiness plan, and other project documentation                                         |
+| `docs/`       | release docs and other current project documentation                                         |
 
 ---
 
@@ -415,8 +415,7 @@ Pure services (`DataService`, `DailyStatsService`, helpers) do **not** need disp
 ### Documentation Entry Points
 
 - `README.md` = project overview, quick-start, and release doc links
-- `docs/RELEASE_PROCESS.md` = versioning and packaging workflow
-- `docs/PRODUCTION_READINESS_PLAN.md` = tracked production readiness plan
+- `docs/RELEASE_PROCESS.md` = versioning, packaging, and deferred code-signing work
 
 ---
 

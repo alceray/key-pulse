@@ -170,8 +170,7 @@ dotnet test "KeyPulse Signal.sln"
 
 ## Project docs
 
-- [Production readiness plan](docs/PRODUCTION_READINESS_PLAN.md): hardening work and remaining tasks.
-- [Release process](docs/RELEASE_PROCESS.md): versioning and packaging.
+- [Release process](docs/RELEASE_PROCESS.md): versioning, packaging, and deferred code signing.
 - [Release checklist](docs/RELEASE_CHECKLIST.md): checks before publishing.
 - [Changelog](CHANGELOG.md): changes in each release.
 

@@ -74,3 +74,13 @@ KeyPulse Signal updates are installer-driven:
   - `%AppData%\KeyPulse Signal\settings.json`
   - `%AppData%\KeyPulse Signal\Logs\`
 - Installer filename includes the release version.
+
+## Deferred Code Signing
+
+Code-signing rollout remains deferred. The signing script exists, but the current GitHub Actions release workflow does not invoke it. This is the remaining follow-up from the completed production-readiness plan.
+
+- **Available:** `scripts/Sign-ReleaseArtifacts.ps1` supports a certificate thumbprint (`KEYPULSE_SIGN_CERT_THUMBPRINT`) or PFX (`KEYPULSE_SIGN_PFX_PATH` and `KEYPULSE_SIGN_PFX_PASSWORD`), SHA-256 digests, and RFC3161 timestamps.
+- **Remaining:** Obtain a signing certificate and configure access to it in the release environment.
+- **Remaining:** Wire signing into the release workflow: sign the published app before compiling the installer, then sign the installer before generating its checksum and uploading release artifacts.
+- **Remaining:** Make signing failures fail the release and verify signatures on both the installed executable and final installer.
+- **Completion criteria:** A release produced through the normal workflow has valid, timestamped signatures on both artifacts, with verification recorded in the release checklist.
