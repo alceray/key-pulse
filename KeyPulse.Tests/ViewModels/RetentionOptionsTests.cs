@@ -5,10 +5,9 @@ namespace KeyPulse.Tests.ViewModels;
 public class RetentionOptionsTests
 {
     [Fact]
-    public void All_StartsWithForeverDefault()
+    public void All_OrdersShortestToLongestWithForeverLast()
     {
-        RetentionOptions.All[0].Months.ShouldBe(0);
-        RetentionOptions.All.Select(o => o.Months).ShouldBe([0, 24, 12, 6]);
+        RetentionOptions.All.Select(o => o.Months).ShouldBe([6, 12, 24, 0]);
     }
 
     [Theory]

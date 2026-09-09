@@ -83,7 +83,7 @@
                 DisplayMemberPath="Label"
               />
               <local:InfoHint
-                Text="Limits how long a minute-by-minute record of your input activity is stored, for privacy reasons and to keep the database compact. Charts, calendar history, and lifetime totals are unaffected."
+                Text="A year of minute-by-minute activity is roughly 90–130 MB for two devices active 8 hours/day. Records older than the selected period are deleted to save space. What you see in the app stays the same."
                 Margin="6,0,0,0"
                 VerticalAlignment="Center"
               />
@@ -154,8 +154,7 @@
               </RadioButton>
             </Grid>
 
-            <!-- Sized to the tallest state so switching providers does not resize the card. -->
-            <StackPanel MinHeight="46">
+            <StackPanel>
               <Grid
                 Visibility="{Binding ShowPostgreSqlSummary, Converter={StaticResource BoolToVisibility}}"
                 Margin="0,12,0,0"

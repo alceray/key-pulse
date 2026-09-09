@@ -8,12 +8,13 @@ public static class RetentionOptions
 {
     public static readonly IReadOnlyList<RetentionOption> All =
     [
-        new("Forever", 0),
-        new("2 years", 24),
-        new("1 year", 12),
         new("6 months", 6),
+        new("1 year", 12),
+        new("2 years", 24),
+        new("Forever", 0),
     ];
 
     /// <summary>Maps a persisted month count to its option; unknown values fall back to Forever.</summary>
-    public static RetentionOption FromMonths(int months) => All.FirstOrDefault(o => o.Months == months) ?? All[0];
+    public static RetentionOption FromMonths(int months) =>
+        All.FirstOrDefault(o => o.Months == months) ?? All.First(o => o.Months == 0);
 }

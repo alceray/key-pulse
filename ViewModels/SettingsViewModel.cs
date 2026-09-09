@@ -20,7 +20,7 @@ public class SettingsViewModel : ToastMessageViewModelBase
     private bool _autoInstallUpdates;
     private bool _closeToTray;
     private bool _darkMode;
-    private RetentionOption _selectedRetentionOption = RetentionOptions.All[0];
+    private RetentionOption _selectedRetentionOption = RetentionOptions.FromMonths(0);
     private bool _isCheckingUpdates;
     private bool _isUpdateAvailable;
     private string? _latestUpdateVersion;
