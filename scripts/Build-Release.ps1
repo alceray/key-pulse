@@ -1,6 +1,6 @@
 ﻿# Build-Release.ps1
 # Local equivalent of the GitHub Actions release workflow.
-# Usage: .\scripts\Build-Release.ps1 [-Version "1.2.0"]
+# Usage: .\Scripts\Build-Release.ps1 [-Version "1.2.0"]
 # If -Version is omitted, the version in KeyPulse.csproj is used as-is.
 
 param(
@@ -48,11 +48,11 @@ if (-not $iscc) {
     throw "iscc.exe not found. Install Inno Setup and ensure it is on PATH."
 }
 
-& iscc.exe /DAppVersion=$Version "installer\KeyPulse.iss"
+& iscc.exe /DAppVersion=$Version "Installer\KeyPulse.iss"
 if ($LASTEXITCODE -ne 0) { throw "Inno Setup build failed." }
 
 # Confirm output
-$installer = Get-ChildItem "installer\output\KeyPulse-Signal-Setup-*.exe" -ErrorAction SilentlyContinue |
+$installer = Get-ChildItem "Installer\output\KeyPulse-Signal-Setup-*.exe" -ErrorAction SilentlyContinue |
     Sort-Object LastWriteTime -Descending |
     Select-Object -First 1
 

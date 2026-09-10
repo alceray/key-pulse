@@ -1,15 +1,15 @@
 ﻿# KeyPulse Signal Release Process
 
 This document is the canonical release runbook (commands and behavior details). Use
-`docs/RELEASE_CHECKLIST.md` as the execution checklist.
+`Docs/RELEASE_CHECKLIST.md` as the execution checklist.
 
 ## Versioning Scheme
 
 The git tag is the single source of truth for release versions. The workflow automatically injects versions from the tag into the build — no manual version bumps in
-`KeyPulse.csproj` or `installer/KeyPulse.iss` are required for GitHub releases.
+`KeyPulse.csproj` or `Installer/KeyPulse.iss` are required for GitHub releases.
 
 - `KeyPulse.csproj` `Version` and `FileVersion` are overridden at publish time via MSBuild `/p:` args
-- `installer/KeyPulse.iss` `AppVersion` is overridden at compile time via `/DAppVersion=...`
+- `Installer/KeyPulse.iss` `AppVersion` is overridden at compile time via `/DAppVersion=...`
 
 `KeyPulse.csproj` may keep a developer-default version (e.g.
 `1.2.0`) for local builds. It does not need to be bumped before tagging, though keeping it in sync
@@ -37,7 +37,7 @@ Pushing a version tag triggers the release workflow (`.github/workflows/release.
 3. Commit and push.
 4. Push a version tag with the helper script:
    ```powershell
-   .\scripts\New-Release.ps1
+   .\Scripts\New-Release.ps1
    ```
    The script uses `Version` from `KeyPulse.csproj`. Pass `-Version "1.2.0"` to override it.
 5. The script validates a clean working tree and asks you to confirm the release version before
@@ -55,7 +55,7 @@ git push origin v1.2.0
 ## Manual Build (local testing)
 
 ```powershell
-.\scripts\Build-Release.ps1 -Version "1.2.0"
+.\Scripts\Build-Release.ps1 -Version "1.2.0"
 ```
 
 Omit `-Version` to use the default version in `KeyPulse.csproj`.
@@ -82,7 +82,7 @@ KeyPulse Signal updates are installer-driven:
 
 Code-signing rollout remains deferred. The signing script exists, but the current GitHub Actions release workflow does not invoke it. This is the remaining follow-up from the completed production-readiness plan.
 
-- **Available:** `scripts/Sign-ReleaseArtifacts.ps1` supports a certificate thumbprint (`KEYPULSE_SIGN_CERT_THUMBPRINT`) or PFX (`KEYPULSE_SIGN_PFX_PATH` and `KEYPULSE_SIGN_PFX_PASSWORD`), SHA-256 digests, and RFC3161 timestamps.
+- **Available:** `Scripts/Sign-ReleaseArtifacts.ps1` supports a certificate thumbprint (`KEYPULSE_SIGN_CERT_THUMBPRINT`) or PFX (`KEYPULSE_SIGN_PFX_PATH` and `KEYPULSE_SIGN_PFX_PASSWORD`), SHA-256 digests, and RFC3161 timestamps.
 - **Remaining:** Obtain a signing certificate and configure access to it in the release environment.
 - **Remaining:** Wire signing into the release workflow: sign the published app before compiling the installer, then sign the installer before generating its checksum and uploading release artifacts.
 - **Remaining:** Make signing failures fail the release and verify signatures on both the installed executable and final installer.

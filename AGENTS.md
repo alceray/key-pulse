@@ -246,6 +246,7 @@ Device state management is centralized in `UsbMonitorService.AddDeviceEvent()`:
 ### TODO Planning
 
 - Create TODO files only when the user explicitly requests one. They are reserved for long tasks that need written steps.
+- Every TODO must include **Created** and **Updated** dates near the top, using `YYYY-MM-DD`. Preserve the creation date and refresh the update date whenever the TODO changes.
 - Every TODO created or substantively updated must include a **code churn estimate**.
 - Estimate affected file counts and lines added/deleted as ranges, separating implementation, tests,
   and documentation where useful. State the main assumptions and update the estimate if scope changes.
@@ -295,6 +296,8 @@ dotnet ef database update SomeOlderMigrationName
 
 ## File Organization & Responsibilities
 
+Use PascalCase for project-owned folders, including `Docs/`, `Scripts/`, `Installer/`, and `Tasks/`. Keep tool-managed and generated folder names such as `.github/`, `bin/`, `obj/`, `artifacts/`, `publish/`, and `Installer/output/` in their established form. Catalog import scripts and metadata live together in `Scripts/Catalogs/`; accepted catalogs live in `Assets/Catalogs/`.
+
 | Folder        | Purpose                                                                                                          |
 |---------------|------------------------------------------------------------------------------------------------------------------|
 | `Helpers/`    | `ObservableObject`, `RelayCommand`, `UsbDeviceClassifier`, `TimeFormatter`, `PowerShellScripts`, `HeartbeatFile` |
@@ -305,7 +308,7 @@ dotnet ef database update SomeOlderMigrationName
 | `ViewModels/` | MVVM viewmodels for each UI view; `StatusMessageViewModelBase` provides shared status toast behavior. `Dashboard/` and `Calendar/` subfolders hold the chart/pie/color builders, DTOs, and per-view helpers extracted from the larger view-models |
 | `Views/`      | XAML + code-behind for UI; `StatusMessagePanel` is a reusable status toast control; `SharedConverters.cs` holds shared `IValueConverter`s (e.g. `InverseBoolToVisibilityConverter`, `DurationSecondsConverter`); `Styles/AppStyles.xaml` holds the app-wide control styles |
 | `Migrations/` | EF Core snapshot migrations (read-only; auto-generated)                                                          |
-| `docs/`       | release docs and other current project documentation                                         |
+| `Docs/`       | release docs and other current project documentation                                         |
 
 ---
 
@@ -415,7 +418,7 @@ Pure services (`DataService`, `DailyStatsService`, helpers) do **not** need disp
 ### Documentation Entry Points
 
 - `README.md` = project overview, quick-start, and release doc links
-- `docs/RELEASE_PROCESS.md` = versioning, packaging, and deferred code-signing work
+- `Docs/RELEASE_PROCESS.md` = versioning, packaging, and deferred code-signing work
 
 ---
 

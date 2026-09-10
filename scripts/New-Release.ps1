@@ -1,6 +1,6 @@
 ﻿# New-Release.ps1
 # Tags and pushes a release in one step, triggering the GitHub Actions release workflow.
-# Usage: .\scripts\New-Release.ps1 [-Version "1.2.0"]
+# Usage: .\Scripts\New-Release.ps1 [-Version "1.2.0"]
 # If -Version is omitted, the Version in KeyPulse.csproj is used.
 
 param(

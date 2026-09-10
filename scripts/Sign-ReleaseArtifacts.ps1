@@ -2,7 +2,7 @@
     [string[]]$ArtifactPaths = @(
         "publish\KeyPulse Signal.exe"
     ),
-    [string]$InstallerArtifactPattern = "installer\output\KeyPulse-Signal-Setup-*.exe",
+    [string]$InstallerArtifactPattern = "Installer\output\KeyPulse-Signal-Setup-*.exe",
     [string]$TimestampUrl = "http://timestamp.digicert.com"
 )
 

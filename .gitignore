@@ -367,11 +367,11 @@ FodyWeavers.xsd
 .vscode
 
 # Inno Setup installer output (compiled .exe artifacts)
-installer/output/
+Installer/output/
 
 # Junie working folder
 .junie
 
 # Claude working folders
 .claude
-tasks/
+Tasks/

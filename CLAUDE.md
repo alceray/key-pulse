@@ -22,7 +22,7 @@ dotnet ef migrations add <Name> -c PostgreSqlApplicationDbContext -o Migrations/
 dotnet ef migrations remove
 dotnet ef database update
 
-.\scripts\Build-Release.ps1 [-Version "1.2.0"]   # publish + Inno Setup installer (needs iscc.exe on PATH)
+.\Scripts\Build-Release.ps1 [-Version "1.2.0"]   # publish + Inno Setup installer (needs iscc.exe on PATH)
 ```
 
 - **Tests** live in `KeyPulse.Tests/` (xUnit + Shouldly). Run them via the solution: `dotnet test "KeyPulse Signal.sln"`. Bare `dotnet test` fails (`MSB1011`) because `KeyPulse.csproj` sits beside the `.sln` at the repo root — always name the `.sln` (or `KeyPulse.Tests`). Beyond unit-testing pure helpers, DB-backed tests use the `SqliteTestDatabase` fixture (throwaway file SQLite, real EF model). Behavior that needs the live WMI/Raw Input/WPF stack is still verified manually by running the app.
@@ -77,7 +77,7 @@ DB lives at `%AppData%\KeyPulse Signal\keypulse-data.db` (Release) or `...\Test\
 - One task per subagent for focused execution
 
 ### 3. Self-Improvement Loop
-- After ANY correction from the user: update `tasks/lessons.md` with the pattern
+- After ANY correction from the user: update `Tasks/lessons.md` with the pattern
 - Write rules for yourself that prevent the same mistake
 - Ruthlessly iterate on these lessons until mistake rate drops
 - Review lessons at session start for relevant project
@@ -103,17 +103,17 @@ DB lives at `%AppData%\KeyPulse Signal\keypulse-data.db` (Release) or `...\Test\
 ## Task Management
 
 1. **Only When Requested**: Create a TODO file only when the user explicitly requests one. TODOs are
-   reserved for long tasks that need written steps. When requested, use `tasks/todo<TaskName>.md` with checkable items.
-   `<TaskName>` is PascalCase and names the task, e.g. `tasks/todoProjectionWatermark.md`.
-2. **One File Per Task**: Never write to a bare `tasks/todo.md`, and never overwrite or repurpose an
-   existing todo file. `tasks/` is gitignored, so an overwrite is unrecoverable from git. If a plan
+   reserved for long tasks that need written steps. When requested, use `Tasks/todo<TaskName>.md` with checkable items.
+   `<TaskName>` is PascalCase and names the task, e.g. `Tasks/todoProjectionWatermark.md`.
+2. **One File Per Task**: Never write to a bare `Tasks/todo.md`, and never overwrite or repurpose an
+   existing todo file. `Tasks/` is gitignored, so an overwrite is unrecoverable from git. If a plan
    seems obsolete, archive it rather than replacing it.
 3. **Verify Plan**: Follow the user's requested review process for an explicitly requested TODO.
 4. **Track Progress**: For an explicitly requested TODO, mark items complete as you go
 5. **Explain Changes**: High-level summary at each step
 6. **Document Results**: If the user requested a TODO, add a review section to it
-7. **Archive When Done**: Move requested TODOs to `tasks/completed/`, keeping the same name
-8. **Capture Lessons**: Update `tasks/lessons.md` after corrections
+7. **Archive When Done**: Move requested TODOs to `Tasks/Completed/`, keeping the same name
+8. **Capture Lessons**: Update `Tasks/lessons.md` after corrections
 
 ## Core Principles
 

@@ -8,14 +8,14 @@
 
 ## Release
 
-- [ ] Run the release command from `docs/RELEASE_PROCESS.md` -> `How to Cut a Release`.
+- [ ] Run the release command from `Docs/RELEASE_PROCESS.md` -> `How to Cut a Release`.
 - [ ] Confirm GitHub Actions workflow completed successfully.
 - [ ] Confirm installer is attached to the GitHub Release.
 - [ ] Confirm installer filename includes version.
 
 ## Optional Signing
 
-- [ ] If signing is enabled, run `.\scripts\Sign-ReleaseArtifacts.ps1`.
+- [ ] If signing is enabled, run `.\Scripts\Sign-ReleaseArtifacts.ps1`.
 - [ ] Verify signature.
 
 ## Upgrade Validation (Installer-Driven)

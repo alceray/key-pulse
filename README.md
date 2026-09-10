@@ -4,7 +4,7 @@
 
 KeyPulse Signal is a Windows desktop app that tracks how much you use each USB keyboard and mouse. Compare your daily drivers by connection time, keystrokes, clicks, and daily activity, with tracking that continues in the background while the app runs in your system tray.
 
-![KeyPulse Signal dashboard showing all-time keyboard and mouse activity across connected USB devices](docs/images/dashboard-all-time.png)
+![KeyPulse Signal dashboard showing all-time keyboard and mouse activity across connected USB devices](Docs/Images/dashboard-all-time.png)
 
 ## Get started
 
@@ -30,7 +30,7 @@ KeyPulse Signal is a Windows desktop app that tracks how much you use each USB k
 - **Connection history:** see when each device connected and disconnected.
 - **Activity totals:** track keystrokes, mouse clicks, and the number of seconds with mouse movement.
 
-![KeyPulse Signal calendar with a day selected, showing per-device connection, activity, sessions, and hourly input](docs/images/calendar-day.png)
+![KeyPulse Signal calendar with a day selected, showing per-device connection, activity, sessions, and hourly input](Docs/Images/calendar-day.png)
 
 ### Manage your devices
 
@@ -170,8 +170,8 @@ dotnet test "KeyPulse Signal.sln"
 
 ## Project docs
 
-- [Release process](docs/RELEASE_PROCESS.md): versioning, packaging, and deferred code signing.
-- [Release checklist](docs/RELEASE_CHECKLIST.md): checks before publishing.
+- [Release process](Docs/RELEASE_PROCESS.md): versioning, packaging, and deferred code signing.
+- [Release checklist](Docs/RELEASE_CHECKLIST.md): checks before publishing.
 - [Changelog](CHANGELOG.md): changes in each release.
 
 ## License
