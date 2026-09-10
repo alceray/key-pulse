@@ -1,0 +1,845 @@
+{
+  "schemaVersion": 1,
+  "entities": [
+    {
+      "canonical": "GMK",
+      "aliases": [],
+      "keycapDefaults": {
+        "manufacturer": true,
+        "profile": "Cherry",
+        "material": "ABS",
+        "unlessProfile": "MTNU"
+      }
+    },
+    {
+      "canonical": "KeyKobo",
+      "aliases": [
+        "Keykobo",
+        "Key Kobo",
+        "KKB"
+      ],
+      "namePrefix": "KKB",
+      "keycapDefaults": {
+        "manufacturer": true,
+        "material": "ABS"
+      }
+    },
+    {
+      "canonical": "Keygeek",
+      "aliases": [
+        "KeyGeek",
+        "KEYGEEK"
+      ],
+      "switchManufacturer": true
+    },
+    {
+      "canonical": "EnjoyPBT",
+      "aliases": [
+        "ePBT",
+        "EPBT"
+      ],
+      "namePrefix": "ePBT",
+      "keycapDefaults": {
+        "manufacturer": true
+      }
+    },
+    {
+      "canonical": "Milkyway Keys",
+      "aliases": [
+        "Milkyway",
+        "MW",
+        "MilkywayKeys",
+        "Milkway Keys"
+      ],
+      "namePrefix": "MW",
+      "keycapDefaults": {
+        "manufacturer": true
+      }
+    },
+    {
+      "canonical": "Keyboard Science",
+      "aliases": [
+        "Keyboard science",
+        "KBS"
+      ],
+      "namePrefix": "KBS",
+      "keycapDefaults": {
+        "manufacturer": true
+      }
+    },
+    {
+      "canonical": "GoMaster",
+      "aliases": [
+        "GOM"
+      ],
+      "namePrefix": "GOM",
+      "keycapDefaults": {
+        "manufacturer": true
+      }
+    },
+    {
+      "canonical": "MMD",
+      "aliases": [
+        "Mengmoda",
+        "MengMoDa"
+      ]
+    },
+    {
+      "canonical": "NovelKeys",
+      "aliases": [
+        "Novelkeys",
+        "NK",
+        "NK_"
+      ],
+      "namePrefix": "NK"
+    },
+    {
+      "canonical": "Swagkeys",
+      "aliases": [
+        "SwagKeys",
+        "SWG"
+      ],
+      "namePrefix": "SWG",
+      "keycapDefaults": {
+        "manufacturer": true
+      }
+    },
+    {
+      "canonical": "Wuque Studio",
+      "aliases": [
+        "Wuque",
+        "WS"
+      ],
+      "namePrefix": "WS",
+      "keycapDefaults": {
+        "manufacturer": true
+      }
+    },
+    {
+      "canonical": "RAMA Works",
+      "aliases": [
+        "Rama",
+        "RAMA",
+        "RAMA WORKS"
+      ],
+      "namePrefix": "RAMA"
+    },
+    {
+      "canonical": "Geon",
+      "aliases": [
+        "GEONWORKS",
+        "Geonworks",
+        "geonworks"
+      ]
+    },
+    {
+      "canonical": "Bolsa Supply",
+      "aliases": [
+        "Bolsa"
+      ]
+    },
+    {
+      "canonical": "Prime Keyboards",
+      "aliases": [
+        "PrimeKB"
+      ],
+      "namePrefix": "PrimeKB"
+    },
+    {
+      "canonical": "Moyu Studio",
+      "aliases": [
+        "Moyu"
+      ]
+    },
+    {
+      "canonical": "Royal Kludge",
+      "aliases": [
+        "RK"
+      ],
+      "namePrefix": "RK"
+    },
+    {
+      "canonical": "43 Studio",
+      "aliases": [
+        "43 Studios",
+        "43Studio"
+      ]
+    },
+    {
+      "canonical": "80Retros",
+      "aliases": [
+        "80 Retros",
+        "80 RETROS"
+      ]
+    },
+    {
+      "canonical": "Designer Studio",
+      "aliases": [
+        "DesignerStudio"
+      ]
+    },
+    {
+      "canonical": "FL.CMMK",
+      "aliases": [
+        "FLCMMK"
+      ]
+    },
+    {
+      "canonical": "G.Rule",
+      "aliases": [
+        "G Rule"
+      ]
+    },
+    {
+      "canonical": "SP-Star",
+      "aliases": [
+        "SP Star"
+      ],
+      "switchManufacturer": true
+    },
+    {
+      "canonical": "Domikey",
+      "aliases": [
+        "DMK"
+      ],
+      "namePrefix": "DMK",
+      "keycapDefaults": {
+        "manufacturer": true
+      }
+    },
+    {
+      "canonical": "JC Studio",
+      "aliases": [
+        "JCS"
+      ],
+      "namePrefix": "JCS"
+    },
+    {
+      "canonical": "C3Equalz",
+      "aliases": [
+        "C3",
+        "C³Equalz",
+        "Equalz"
+      ],
+      "namePrefix": "C3"
+    },
+    {
+      "canonical": "Glove Studio",
+      "aliases": [
+        "Glove",
+        "Glove.Studio",
+        "Glove studio"
+      ]
+    },
+    {
+      "canonical": "Grain Gold",
+      "aliases": [
+        "Dongguan Grain Gold"
+      ],
+      "switchManufacturer": true
+    },
+    {
+      "canonical": "Dangkeebs",
+      "aliases": [
+        "Dangkeeb"
+      ],
+      "exactAliases": [
+        "DK"
+      ],
+      "namePrefix": "DK"
+    },
+    {
+      "canonical": "Divinikey",
+      "aliases": [],
+      "exactAliases": [
+        "dk"
+      ],
+      "namePrefix": "dk"
+    },
+    {
+      "canonical": "Drop",
+      "aliases": [
+        "Massdrop"
+      ]
+    },
+    {
+      "canonical": "KeebsForAll",
+      "aliases": [
+        "KFA",
+        "kfaPBT",
+        "keebsforall"
+      ],
+      "namePrefixes": {
+        "switches": "KFA",
+        "keycaps": "kfaPBT"
+      }
+    },
+    {
+      "canonical": "TX",
+      "aliases": []
+    },
+    {
+      "canonical": "Typeplus",
+      "aliases": []
+    },
+    {
+      "canonical": "Aesco",
+      "aliases": [
+        "AESCO"
+      ]
+    },
+    {
+      "canonical": "Aflion",
+      "aliases": [
+        "AFLION"
+      ],
+      "switchManufacturer": true
+    },
+    {
+      "canonical": "Aiguox",
+      "aliases": [
+        "AIGUOX"
+      ]
+    },
+    {
+      "canonical": "ASUS",
+      "aliases": [
+        "Asus"
+      ]
+    },
+    {
+      "canonical": "AULA",
+      "aliases": [
+        "Aula"
+      ]
+    },
+    {
+      "canonical": "CannonKeys",
+      "aliases": [
+        "Cannonkeys"
+      ]
+    },
+    {
+      "canonical": "Cherry",
+      "aliases": [
+        "CHERRY"
+      ],
+      "switchManufacturer": true
+    },
+    {
+      "canonical": "CreateKeebs",
+      "aliases": [
+        "Createkeebs"
+      ],
+      "keycapDefaults": {
+        "manufacturer": true
+      }
+    },
+    {
+      "canonical": "DareU",
+      "aliases": [
+        "Dareu"
+      ]
+    },
+    {
+      "canonical": "Duhuk",
+      "aliases": [
+        "DUHUK"
+      ]
+    },
+    {
+      "canonical": "EpicGear",
+      "aliases": [
+        "Epicgear"
+      ]
+    },
+    {
+      "canonical": "EverFree",
+      "aliases": [
+        "Everfree"
+      ]
+    },
+    {
+      "canonical": "Everglide",
+      "aliases": [
+        "EverGlide"
+      ]
+    },
+    {
+      "canonical": "EWEADN",
+      "aliases": [
+        "Eweadn"
+      ]
+    },
+    {
+      "canonical": "Feker",
+      "aliases": [
+        "FEKER"
+      ]
+    },
+    {
+      "canonical": "GravaStar",
+      "aliases": [
+        "Gravastar"
+      ]
+    },
+    {
+      "canonical": "Haimu",
+      "aliases": [
+        "HaiMu"
+      ],
+      "switchManufacturer": true
+    },
+    {
+      "canonical": "HORI",
+      "aliases": [
+        "Hori"
+      ]
+    },
+    {
+      "canonical": "JWICK",
+      "aliases": [
+        "Jwick"
+      ],
+      "manufacturer": "JWK"
+    },
+    {
+      "canonical": "Durock",
+      "aliases": [],
+      "manufacturer": "JWK"
+    },
+    {
+      "canonical": "JWK",
+      "aliases": [],
+      "switchManufacturer": true
+    },
+    {
+      "canonical": "KBDfans",
+      "aliases": [
+        "KBDFans",
+        "Kbdfans"
+      ]
+    },
+    {
+      "canonical": "Keyspensory",
+      "aliases": [
+        "KeysPensory",
+        "KeySpensory"
+      ]
+    },
+    {
+      "canonical": "Keyworld",
+      "aliases": [
+        "KeyWorld"
+      ]
+    },
+    {
+      "canonical": "KiiBOOM",
+      "aliases": [
+        "Kiiboom"
+      ]
+    },
+    {
+      "canonical": "LeleLab",
+      "aliases": [
+        "Lelelab",
+        "lelelab"
+      ]
+    },
+    {
+      "canonical": "LEOBOG",
+      "aliases": [
+        "Leobog"
+      ]
+    },
+    {
+      "canonical": "Lichicx",
+      "aliases": [
+        "LICHICX"
+      ]
+    },
+    {
+      "canonical": "MelGeek",
+      "aliases": [
+        "Melgeek"
+      ]
+    },
+    {
+      "canonical": "Mode",
+      "aliases": [
+        "MODE"
+      ]
+    },
+    {
+      "canonical": "osume",
+      "aliases": [
+        "Osume"
+      ]
+    },
+    {
+      "canonical": "Outemu",
+      "aliases": [
+        "OUTEMU"
+      ],
+      "switchManufacturer": true
+    },
+    {
+      "canonical": "PBTfans",
+      "aliases": [
+        "PBTFans"
+      ],
+      "keycapDefaults": {
+        "manufacturer": true
+      }
+    },
+    {
+      "canonical": "Punkshoo",
+      "aliases": [
+        "PunkShoo",
+        "PuNkShoO"
+      ]
+    },
+    {
+      "canonical": "Sillyworks",
+      "aliases": [
+        "SILLYWORKS"
+      ]
+    },
+    {
+      "canonical": "Skyloong",
+      "aliases": [
+        "SKYLOONG"
+      ]
+    },
+    {
+      "canonical": "SoulCat",
+      "aliases": [
+        "SOULCAT",
+        "Soulcat"
+      ],
+      "keycapDefaults": {
+        "manufacturer": true
+      }
+    },
+    {
+      "canonical": "Vertex",
+      "aliases": [
+        "VERTEX"
+      ]
+    },
+    {
+      "canonical": "Wingtree",
+      "aliases": [
+        "WingTree",
+        "WINGTREE"
+      ],
+      "switchManufacturer": true
+    },
+    {
+      "canonical": "WOBkey",
+      "aliases": [
+        "WOBKey"
+      ]
+    },
+    {
+      "canonical": "XLLAB",
+      "aliases": [
+        "Xllab"
+      ]
+    },
+    {
+      "canonical": "HP",
+      "aliases": [
+        "hp"
+      ]
+    },
+    {
+      "canonical": "IDK",
+      "aliases": [
+        "Idk"
+      ]
+    },
+    {
+      "canonical": "Neo",
+      "aliases": [
+        "NEO"
+      ]
+    },
+    {
+      "canonical": "Gateron",
+      "aliases": [
+        "GATERON",
+        "Gatron"
+      ],
+      "switchManufacturer": true,
+      "keycapDefaults": {
+        "manufacturer": true
+      }
+    },
+    {
+      "canonical": "Kailh",
+      "aliases": [
+        "KAILH",
+        "Kalih"
+      ],
+      "switchManufacturer": true
+    },
+    {
+      "canonical": "Jerrzi",
+      "aliases": [
+        "Jerzzi"
+      ],
+      "switchManufacturer": true
+    },
+    {
+      "canonical": "Iqunix",
+      "aliases": [
+        "Iquinx"
+      ]
+    },
+    {
+      "canonical": "Womier",
+      "aliases": [
+        "Wormier"
+      ]
+    },
+    {
+      "canonical": "Yusya",
+      "aliases": [
+        "Yuysa"
+      ],
+      "switchManufacturer": true
+    },
+    {
+      "canonical": "IKEYX",
+      "aliases": [
+        "Ikeyx",
+        "IKYEX",
+        "Ikyex"
+      ]
+    },
+    {
+      "canonical": "Berserkeys",
+      "aliases": [
+        "BerseKeys",
+        "Beserkeys",
+        "BeserKeys"
+      ]
+    },
+    {
+      "canonical": "Qeeke",
+      "aliases": [
+        "Queeke"
+      ]
+    },
+    {
+      "canonical": "Philikey",
+      "aliases": [
+        "Philikeys"
+      ]
+    },
+    {
+      "canonical": "Owlab",
+      "aliases": [
+        "OwLab",
+        "OWLAB",
+        "Owlabs"
+      ]
+    },
+    {
+      "canonical": "G3MS",
+      "aliases": [
+        "g3ms",
+        "G3MX",
+        "g3mx"
+      ]
+    },
+    {
+      "canonical": "Wingtree / Lichicx",
+      "aliases": [
+        "Wingtree Lichicx",
+        "Wingtree X Lichicx",
+        "Wingtree/Lichicx"
+      ]
+    },
+    {
+      "canonical": "Weipeng (Keygeek)",
+      "aliases": [
+        "Weipeng (KeyGeek)"
+      ]
+    },
+    {
+      "canonical": "Co-Gain / XUDA",
+      "aliases": [
+        "Co-Gain/XUDA"
+      ]
+    },
+    {
+      "canonical": "Signature Plastics",
+      "aliases": [
+        "Signature plastics"
+      ]
+    },
+    {
+      "canonical": "Keyreative",
+      "aliases": [
+        "KeyReative",
+        "keyreative"
+      ],
+      "keycapDefaults": {
+        "manufacturer": true
+      }
+    },
+    {
+      "canonical": "XMI",
+      "aliases": [
+        "Xmi",
+        "xmi",
+        "21KB",
+        "Xiami",
+        "21kb"
+      ],
+      "keycapDefaults": {
+        "manufacturer": true,
+        "profile": "Cherry",
+        "material": "PBT"
+      }
+    },
+    {
+      "canonical": "CRP",
+      "aliases": [],
+      "keycapDefaults": {
+        "manufacturer": "Hammerworks",
+        "profile": "Cherry",
+        "material": "PBT"
+      }
+    },
+    {
+      "canonical": "JTK",
+      "aliases": [
+        "Jtk"
+      ],
+      "keycapDefaults": {
+        "manufacturer": true,
+        "profile": "Cherry",
+        "material": "ABS"
+      }
+    },
+    {
+      "canonical": "Hammerworks",
+      "aliases": [
+        "HammerWorks"
+      ]
+    },
+    {
+      "canonical": "TutKeys",
+      "aliases": [
+        "TUT",
+        "Tutkeys"
+      ],
+      "namePrefix": "TUT",
+      "keycapDefaults": {
+        "manufacturer": true
+      }
+    },
+    {
+      "canonical": "Vividkey",
+      "aliases": [
+        "VVD",
+        "VividKey"
+      ],
+      "namePrefix": "VVD",
+      "keycapDefaults": {
+        "manufacturer": true
+      }
+    }
+  ],
+  "profiles": [
+    {
+      "canonical": "Cherry",
+      "aliases": [
+        "CYL",
+        "Cherry profile",
+        "CYL profile",
+        "CYL, Cherry",
+        "CYL, Cherry profile"
+      ]
+    },
+    {
+      "canonical": "MTNU",
+      "aliases": [],
+      "manufacturer": "GMK",
+      "material": "PBT"
+    },
+    {
+      "canonical": "SA",
+      "aliases": []
+    },
+    {
+      "canonical": "DSA",
+      "aliases": []
+    },
+    {
+      "canonical": "DSS",
+      "aliases": [],
+      "manufacturer": "Signature Plastics"
+    },
+    {
+      "canonical": "DCS",
+      "aliases": [],
+      "manufacturer": "Signature Plastics"
+    },
+    {
+      "canonical": "KAT",
+      "aliases": [],
+      "manufacturer": "Keyreative"
+    },
+    {
+      "canonical": "KAM",
+      "aliases": [],
+      "manufacturer": "Keyreative"
+    },
+    {
+      "canonical": "KSA",
+      "aliases": []
+    },
+    {
+      "canonical": "XDA",
+      "aliases": []
+    },
+    {
+      "canonical": "MDA",
+      "aliases": []
+    },
+    {
+      "canonical": "MT3",
+      "aliases": []
+    },
+    {
+      "canonical": "OEM",
+      "aliases": []
+    },
+    {
+      "canonical": "HSA",
+      "aliases": [],
+      "manufacturer": "JTK",
+      "material": "ABS"
+    },
+    {
+      "canonical": "CRP-X",
+      "aliases": [],
+      "material": "PBT",
+      "manufacturer": "Hammerworks"
+    }
+  ],
+  "manufacturerLabels": [
+    {
+      "label": "Durock/JWK",
+      "manufacturer": "JWK"
+    },
+    {
+      "label": "JWICK/JWK",
+      "manufacturer": "JWK"
+    }
+  ]
+}

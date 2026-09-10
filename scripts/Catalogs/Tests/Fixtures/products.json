@@ -1,0 +1,22 @@
+{
+  "products": [
+    {
+      "id": 101,
+      "title": "[Preorder] Example &amp; Friends Keycaps",
+      "handle": "example-friends",
+      "body_html": "<ul><li>Manufactured by Example Factory</li><li>Designed by Alice &amp; Bob</li><li>Cherry Profile</li><li>ABS Material</li></ul>",
+      "vendor": "Example Brand",
+      "variants": [{ "id": 1001, "title": "Base" }, { "id": 1002, "title": "Novelties" }],
+      "options": [{ "name": "Kit", "values": ["Base", "Novelties"] }]
+    },
+    {
+      "id": 102,
+      "title": "Example Novelties Keycaps",
+      "handle": "example-novelties",
+      "body_html": "<p>Standalone novelties.</p>",
+      "vendor": "Example Brand",
+      "variants": [{ "id": 1003, "title": "Default Title" }],
+      "options": [{ "name": "Title", "values": ["Default Title"] }]
+    }
+  ]
+}

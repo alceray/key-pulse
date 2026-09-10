@@ -1,0 +1,2 @@
+// Synthetic fixture: strings are data, including code-looking content and JS/JSON escapes.
+let catalog = JSON.parse('[{"id":"501","name":"DCS Explorer\'s \\"R2\\"","profile":"DCS","material":"ABS","manufacturer":"Example Factory","designer":"Alice \\u0026 Bob","style":"Cherry","description":"Do not import me","imageUrl":"do-not-download.png"},{"id":"502","name":"DCS Example Fix Kit","profile":"DCS","material":"ABS"},{"id":"503","name":"DCS Example 40% Monokit","profile":"DCS","material":"PBT","manufacturer":null,"designer":"?"}]');

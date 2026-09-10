@@ -1,0 +1,31 @@
+{
+  "documents": [
+    {
+      "name": "projects/keycaplendar/databases/(default)/documents/keysets/fixtureA",
+      "fields": {
+        "alias": { "stringValue": "shareA" },
+        "profile": { "stringValue": "GMK" },
+        "colorway": { "stringValue": "Calendar Explorer++ R2 Accent Kit" },
+        "designer": { "arrayValue": { "values": [{ "stringValue": "Alice" }, { "stringValue": "Bob" }] } },
+        "gbLaunch": { "stringValue": "2026-09-01" },
+        "details": { "stringValue": "https://example.com/project" }
+      }
+    },
+    {
+      "name": "projects/keycaplendar/databases/(default)/documents/keysets/fixtureB",
+      "fields": {
+        "profile": { "stringValue": "MT3 PBT" },
+        "colorway": { "stringValue": "Calendar Moon - CANCELED" },
+        "designer": { "arrayValue": { "values": [{ "stringValue": "Unknown" }] } }
+      }
+    },
+    {
+      "name": "projects/keycaplendar/databases/(default)/documents/keysets/fixtureC",
+      "fields": {
+        "profile": { "stringValue": "PBTfans ABS" },
+        "colorway": { "stringValue": "Calendar Sunrise" },
+        "designer": { "arrayValue": {} }
+      }
+    }
+  ]
+}
